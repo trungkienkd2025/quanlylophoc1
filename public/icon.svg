@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <rect width="512" height="512" rx="112" fill="#2563eb"/>
+  <circle cx="256" cy="256" r="190" fill="#1d4ed8"/>
+  <path d="M140 180h232c16 0 28 12 28 28v140c0 16-12 28-28 28H140c-16 0-28-12-28-28V208c0-16 12-28 28-28z" fill="#ffffff" opacity="0.15"/>
+  <!-- Graduation / School cap & Book symbol -->
+  <path d="M256 140l140 65-140 65-140-65 140-65z" fill="#ffffff"/>
+  <path d="M166 230v70c0 40 40 70 90 70s90-30 90-70v-70l-90 42-90-42z" fill="#ffffff"/>
+  <circle cx="396" cy="235" r="14" fill="#f59e0b"/>
+  <path d="M396 240v55" stroke="#f59e0b" stroke-width="8" stroke-linecap="round"/>
+</svg>

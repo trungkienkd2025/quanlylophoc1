@@ -1,0 +1,35 @@
+====================================================================
+HƯỚNG DẪN MỞ VÀ SỬ DỤNG HỆ THỐNG QUẢN LÝ LỚP HỌC QLLH.PRO
+====================================================================
+
+LÝ DO KHÔNG THỂ BẤM ĐÚP TRỰC TIẾP VÀO FILE "index.html":
+- Đây là một ứng dụng web hiện đại viết bằng React & TypeScript.
+- Trình duyệt sẽ chặn không cho chạy mã nguồn trực tiếp từ đường dẫn file thông thường (file:///C:/...) vì lý do an toàn bảo mật (CORS).
+
+--------------------------------------------------------------------
+CÁCH 1: DÙNG TRỰC TIẾP TRÊN MẠNG (DỄ NHẤT - KHUYÊN DÙNG)
+--------------------------------------------------------------------
+Bạn không cần cài bất kỳ phần mềm hay công cụ nào, chỉ cần mở link:
+👉 https://ais-pre-plc7vaqocozeh4xkmmqn3r-106567251807.asia-northeast1.run.app
+
+- Trên điện thoại: Mở link trên -> Nhấn menu trình duyệt -> Chọn "Thêm vào màn hình chính" để dùng như App.
+- Trên máy tính: Mở link trên bằng Chrome hoặc Edge -> Bấm biểu tượng "Cài đặt ứng dụng" trên thanh địa chỉ.
+
+--------------------------------------------------------------------
+CÁCH 2: CHẠY NỘI BỘ TRÊN MÁY TÍNH CÁ NHÂN (OFFLINE)
+--------------------------------------------------------------------
+Bước 1: Tải và cài đặt Node.js (miễn phí)
+- Truy cập: https://nodejs.org
+- Tải bản "LTS" (Recommended for Most Users) về máy và bấm Next cài đặt.
+
+Bước 2: Chạy ứng dụng
+- Bấm đúp vào file "Chay_Ung_Dung_Tren_May_Tinh.bat" trong thư mục này.
+HOẶC:
+- Nhấp vào thanh địa chỉ của thư mục này, gõ: cmd rồi bấm Enter.
+- Cửa sổ màu đen hiện ra, gõ 2 lệnh sau:
+     npm install
+     npm run dev
+- Màn hình sẽ tự động mở trang web tại địa chỉ: http://localhost:3000
+
+Chúc thầy/cô giảng dạy thành công!
+====================================================================

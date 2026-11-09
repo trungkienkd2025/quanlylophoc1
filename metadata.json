@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix QLLH.Pro - Quản Lý Lớp Học Thông Minh",
+  "description": "Hệ thống quản lý lớp học toàn diện cho giáo viên: quản lý học sinh, điểm danh, phát biểu thi đua, trắc nghiệm, học liệu số và tiện ích lớp học.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "QLLH.Pro - Quản Lý Lớp Học",
+  "short_name": "QLLH.Pro",
+  "description": "Hệ thống quản lý lớp học toàn diện cho giáo viên: quản lý học sinh, điểm danh, phát biểu thi đua, trắc nghiệm, học liệu số và tiện ích lớp học.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
