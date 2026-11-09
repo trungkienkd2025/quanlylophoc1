@@ -277,11 +277,17 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       // Tránh đọc đè localStorage nếu sự kiện do chính ClassroomManager kích hoạt
       if ((e as CustomEvent)?.detail?.source === 'ClassroomManager') return;
       const cls = getSavedClasses(currentUser);
-      if (cls) setClassesData(cls);
+      if (cls) {
+        setClassesData((prev) => (JSON.stringify(prev) === JSON.stringify(cls) ? prev : cls));
+      }
       const std = getSavedStudents(currentUser);
-      if (std) setStudentsData(std);
+      if (std) {
+        setStudentsData((prev) => (JSON.stringify(prev) === JSON.stringify(std) ? prev : std));
+      }
       const grd = getSavedGrades(currentUser);
-      if (grd) setGradeData(grd);
+      if (grd) {
+        setGradeData((prev) => (JSON.stringify(prev) === JSON.stringify(grd) ? prev : grd));
+      }
     };
     window.addEventListener('qllh_data_updated', handleGlobalSync);
     return () => window.removeEventListener('qllh_data_updated', handleGlobalSync);

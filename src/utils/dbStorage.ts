@@ -72,6 +72,7 @@ const LEGACY_STORAGE_KEYS = {
 // Dữ liệu lớp mẫu mặc định cho Quản trị viên chính (u_admin)
 const DEFAULT_ADMIN_CLASSES = [
   { id: 'c1', year: '2026-2027', name: '1/1 (ĐIỆP)', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1_2', year: '2026-2027', name: '1/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c2', year: '2026-2027', name: '3/1 (ANH)', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c3', year: '2026-2027', name: '2/1 (ĐĂNG)', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c4', year: '2025-2026', name: '4/1 (HOÀNG)', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },

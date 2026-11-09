@@ -10,7 +10,7 @@ LÝ DO KHÔNG THỂ BẤM ĐÚP TRỰC TIẾP VÀO FILE "index.html":
 CÁCH 1: DÙNG TRỰC TIẾP TRÊN MẠNG (DỄ NHẤT - KHUYÊN DÙNG)
 --------------------------------------------------------------------
 Bạn không cần cài bất kỳ phần mềm hay công cụ nào, chỉ cần mở link:
-👉 https://ais-pre-plc7vaqocozeh4xkmmqn3r-106567251807.asia-northeast1.run.app
+👉 https://ais-pre-woiti7t4spb6qba25nr6dk-106567251807.asia-northeast1.run.app
 
 - Trên điện thoại: Mở link trên -> Nhấn menu trình duyệt -> Chọn "Thêm vào màn hình chính" để dùng như App.
 - Trên máy tính: Mở link trên bằng Chrome hoặc Edge -> Bấm biểu tượng "Cài đặt ứng dụng" trên thanh địa chỉ.

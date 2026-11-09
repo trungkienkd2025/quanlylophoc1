@@ -117,17 +117,20 @@ export default function App() {
 
   const isAdmin = currentUser.role === 'admin';
 
-  // Sync to local storage & cloud
+  // Sync to local storage
   useEffect(() => {
     localStorage.setItem('qllh_user_accounts', JSON.stringify(accounts));
-    pushAccountsToFirestore(accounts);
   }, [accounts]);
 
   // Lắng nghe sự kiện cập nhật tài khoản từ đám mây (Firestore)
   useEffect(() => {
     const handleAccountsSync = (e: any) => {
       if (e.detail?.accounts && Array.isArray(e.detail.accounts) && e.detail.accounts.length > 0) {
-        setAccounts(e.detail.accounts);
+        // Chỉ cập nhật state nếu dữ liệu thực sự khác biệt
+        setAccounts((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(e.detail.accounts)) return prev;
+          return e.detail.accounts;
+        });
       }
     };
     window.addEventListener('qllh_accounts_updated', handleAccountsSync);
