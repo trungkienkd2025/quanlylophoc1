@@ -165,6 +165,7 @@ export async function pushAccountsToFirestore(accounts: any[]): Promise<boolean>
  * Hợp nhất an toàn danh sách lớp giữa server và local:
  * - Giữ lại TẤT CẢ các lớp người dùng vừa tạo cục bộ (không bao giờ xóa mất khi F5)
  * - Tôn trọng danh sách ID đã bị người dùng chủ động bấm xóa (qllh_deleted_class_ids)
+ * - KHỬ TRÙNG LẶP TUYỆT ĐỐI theo Tên lớp và Năm học (ví dụ: không bao giờ có 2 lớp cùng tên '1/2' trong năm '2026-2027')
  */
 export function mergeClassesSafely(serverClasses: any[], userScope?: string): any[] {
   const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -186,23 +187,44 @@ export function mergeClassesSafely(serverClasses: any[], userScope?: string): an
     if (d) deletedIds = new Set(JSON.parse(d));
   } catch {}
 
+  // 1. Lọc bỏ các lớp đã bị chủ động xóa
+  const validServer = (serverClasses || []).filter((c) => c && c.id && !deletedIds.has(c.id));
+  const validLocal = (localClasses || []).filter((c) => c && c.id && !deletedIds.has(c.id));
+
+  // 2. Khử trùng lặp đa tầng: theo Logic Key (Tên lớp chuẩn hóa + Năm học)
   const map = new Map<string, any>();
-  // 1. Thêm từ server (bỏ qua những lớp đã bị bấm xóa)
-  (serverClasses || []).forEach((c) => {
-    if (c && c.id && !deletedIds.has(c.id)) {
-      map.set(c.id, c);
+
+  // Ưu tiên nạp từ server trước
+  validServer.forEach((c) => {
+    const normName = (c.name || '').trim().toLowerCase();
+    const normYear = (c.year || '2026-2027').trim();
+    const logicKey = `${normName}__${normYear}`;
+    map.set(logicKey, c);
+  });
+
+  // Hợp nhất từ local: nếu local có lớp mới mà server chưa có (như 3/3), thêm vào
+  validLocal.forEach((c) => {
+    const normName = (c.name || '').trim().toLowerCase();
+    const normYear = (c.year || '2026-2027').trim();
+    const logicKey = `${normName}__${normYear}`;
+
+    if (!map.has(logicKey)) {
+      map.set(logicKey, c);
+    } else {
+      const existing = map.get(logicKey);
+      // Nếu existing là id mẫu cũ (c_1_2) còn c là id thực tế (c_17...) thì ưu tiên id thực tế
+      const preferredId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17'))
+        ? c.id
+        : existing.id;
+      map.set(logicKey, {
+        ...existing,
+        ...c,
+        id: preferredId,
+        name: existing.name || c.name,
+      });
     }
   });
-  // 2. Hợp nhất từ local: nếu local có lớp mới mà server chưa kịp cập nhật, GIỮ NGUYÊN không được xóa!
-  (localClasses || []).forEach((c) => {
-    if (c && c.id && !deletedIds.has(c.id)) {
-      if (!map.has(c.id)) {
-        map.set(c.id, c);
-      } else {
-        map.set(c.id, { ...map.get(c.id), ...c });
-      }
-    }
-  });
+
   return Array.from(map.values());
 }
 
@@ -229,21 +251,25 @@ export function mergeStudentsSafely(serverStudents: any[], userScope?: string): 
     if (d) deletedIds = new Set(JSON.parse(d));
   } catch {}
 
+  const combined = [
+    ...(serverStudents || []),
+    ...(localStudents || []),
+  ].filter((s) => s && s.id && !deletedIds.has(s.id));
+
   const map = new Map<string, any>();
-  (serverStudents || []).forEach((s) => {
-    if (s && s.id && !deletedIds.has(s.id)) {
-      map.set(s.id, s);
+  combined.forEach((s) => {
+    const normName = (s.name || '').trim().toLowerCase();
+    const classId = (s.classId || '').trim();
+    const code = (s.code || '').trim().toLowerCase();
+    const key = code ? `${code}__${classId}` : (normName ? `${normName}__${classId}` : s.id);
+
+    if (!map.has(key)) {
+      map.set(key, s);
+    } else {
+      map.set(key, { ...map.get(key), ...s });
     }
   });
-  (localStudents || []).forEach((s) => {
-    if (s && s.id && !deletedIds.has(s.id)) {
-      if (!map.has(s.id)) {
-        map.set(s.id, s);
-      } else {
-        map.set(s.id, { ...map.get(s.id), ...s });
-      }
-    }
-  });
+
   return Array.from(map.values());
 }
 

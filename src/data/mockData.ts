@@ -1,10 +1,19 @@
 import { Classroom, DigitalResource, QuizQuestion, Student } from '../types';
 
 export const INITIAL_CLASSROOMS: Classroom[] = [
-  { id: 'c1', name: 'Lớp 3A1', grade: 3, academicYear: '2025 - 2026', totalStudents: 32, roomCode: 'F08AF1' },
-  { id: 'c2', name: 'Lớp 3A2', grade: 3, academicYear: '2025 - 2026', totalStudents: 30, roomCode: 'F08AF1' },
-  { id: 'c3', name: 'Lớp 4A1', grade: 4, academicYear: '2025 - 2026', totalStudents: 35, roomCode: 'F08AF1' },
-  { id: 'c4', name: 'Lớp 5A2', grade: 5, academicYear: '2025 - 2026', totalStudents: 31, roomCode: 'F08AF1' },
+  { id: 'c1', name: '1/1 (ĐIỆP)', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794239990637', name: '1/2', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240001067', name: '1/3', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240007860', name: '1/4', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240020924', name: '1/5', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c3', name: '2/1 (ĐĂNG)', grade: 2, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240029212', name: '2/2', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240034468', name: '2/3', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240039396', name: '2/4', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c2', name: '3/1 (ANH)', grade: 3, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240048892', name: '3/2', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c_1794240058892', name: '3/3', grade: 1, academicYear: '2026-2027', totalStudents: 0, roomCode: 'F08AF1' },
+  { id: 'c4', name: '4/1 (HOÀNG)', grade: 4, academicYear: '2025-2026', totalStudents: 0, roomCode: 'F08AF1' },
 ];
 
 export const INITIAL_STUDENTS: Student[] = [

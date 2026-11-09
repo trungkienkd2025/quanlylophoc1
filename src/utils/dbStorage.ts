@@ -72,26 +72,52 @@ const LEGACY_STORAGE_KEYS = {
 // Dữ liệu lớp mẫu mặc định cho Quản trị viên chính (u_admin)
 const DEFAULT_ADMIN_CLASSES = [
   { id: 'c1', year: '2026-2027', name: '1/1 (ĐIỆP)', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1_2', year: '2026-2027', name: '1/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c2', year: '2026-2027', name: '3/1 (ANH)', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794239990637', year: '2026-2027', name: '1/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240001067', year: '2026-2027', name: '1/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240007860', year: '2026-2027', name: '1/4', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240020924', year: '2026-2027', name: '1/5', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c3', year: '2026-2027', name: '2/1 (ĐĂNG)', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240029212', year: '2026-2027', name: '2/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240034468', year: '2026-2027', name: '2/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240039396', year: '2026-2027', name: '2/4', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c2', year: '2026-2027', name: '3/1 (ANH)', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240048892', year: '2026-2027', name: '3/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240058892', year: '2026-2027', name: '3/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c4', year: '2025-2026', name: '4/1 (HOÀNG)', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
 ];
 
 /**
  * Đọc danh sách lớp học của riêng tài khoản đang đăng nhập
- * - Tài khoản u_admin: đọc dữ liệu của u_admin (có tự động chuyển dữ liệu cũ sang).
- * - Tài khoản Giáo viên (u_gv1, ...): đọc CSDL riêng của tài khoản đó. Mặc định là danh sách rỗng, không dính líu đến admin.
+ * - Tự động khử trùng lặp theo Tên lớp và Năm học
  */
 export function getSavedClasses(user?: UserAccount | string | null): any[] {
   const userId = getUserScopeId(user);
   const keys = getUserStorageKeys(userId);
 
+  const deduplicateList = (items: any[]) => {
+    if (!Array.isArray(items)) return [];
+    const map = new Map<string, any>();
+    items.forEach((c) => {
+      if (!c || !c.name) return;
+      const k = (c.name || '').trim().toLowerCase() + '__' + (c.year || '2026-2027').trim();
+      if (!map.has(k)) {
+        map.set(k, c);
+      } else {
+        const existing = map.get(k);
+        const prefId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17')) ? c.id : existing.id;
+        map.set(k, { ...existing, ...c, id: prefId });
+      }
+    });
+    return Array.from(map.values());
+  };
+
   try {
     const userClassesJson = localStorage.getItem(keys.CLASSES);
     if (userClassesJson) {
       const parsed = JSON.parse(userClassesJson);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return deduplicateList(parsed);
+      }
     }
 
     // Nếu là Quản trị viên tối cao (u_admin), kiểm tra dữ liệu cũ để tự động chuyển tiếp
@@ -100,7 +126,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
       if (v52) {
         const parsed = JSON.parse(v52);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const tagged = parsed.map((c: any) => ({
+          const tagged = deduplicateList(parsed).map((c: any) => ({
             ...c,
             createdBy: c.createdBy || 'u_admin',
             createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
@@ -113,7 +139,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
       if (canonical) {
         const parsed = JSON.parse(canonical);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const tagged = parsed.map((c: any) => ({
+          const tagged = deduplicateList(parsed).map((c: any) => ({
             ...c,
             createdBy: c.createdBy || 'u_admin',
             createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
@@ -122,7 +148,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
           return tagged;
         }
       }
-      // Dữ liệu mẫu ban đầu cho admin
+      // Dữ liệu mẫu ban đầu chuẩn hóa cho admin
       localStorage.setItem(keys.CLASSES, JSON.stringify(DEFAULT_ADMIN_CLASSES));
       return DEFAULT_ADMIN_CLASSES;
     }
@@ -132,7 +158,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
     if (sharedClasses) {
       const parsed = JSON.parse(sharedClasses);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const myClasses = parsed.filter((c: any) => {
+        const myClasses = deduplicateList(parsed).filter((c: any) => {
           return c.createdBy === userId || (typeof user === 'object' && user?.username && c.createdBy === user.username);
         });
         if (myClasses.length > 0) {

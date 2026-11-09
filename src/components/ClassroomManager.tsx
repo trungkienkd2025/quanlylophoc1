@@ -442,9 +442,21 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     return normalizedClasses.filter((c: ClassItem) => isClassVisibleForUser(c, currentUser, adminViewAll));
   }, [normalizedClasses, currentUser, adminViewAll]);
 
-  // Lớp theo năm học đang chọn
+  // Lớp theo năm học đang chọn (tự động khử trùng lặp theo tên lớp)
   const visibleClassesInCurrentYear = useMemo(() => {
-    return visibleClasses.filter((c: ClassItem) => c.year === currentYear);
+    const raw = visibleClasses.filter((c: ClassItem) => c.year === currentYear);
+    const map = new Map<string, ClassItem>();
+    raw.forEach((c) => {
+      const key = (c.name || '').trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, c);
+      } else {
+        const existing = map.get(key)!;
+        const prefId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17')) ? c.id : existing.id;
+        map.set(key, { ...existing, ...c, id: prefId });
+      }
+    });
+    return Array.from(map.values());
   }, [visibleClasses, currentYear]);
 
   // Danh sách lớp trong năm học
