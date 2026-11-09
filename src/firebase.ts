@@ -162,6 +162,131 @@ export async function pushAccountsToFirestore(accounts: any[]): Promise<boolean>
 }
 
 /**
+ * Hợp nhất an toàn danh sách lớp giữa server và local:
+ * - Giữ lại TẤT CẢ các lớp người dùng vừa tạo cục bộ (không bao giờ xóa mất khi F5)
+ * - Tôn trọng danh sách ID đã bị người dùng chủ động bấm xóa (qllh_deleted_class_ids)
+ */
+export function mergeClassesSafely(serverClasses: any[], userScope?: string): any[] {
+  const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+  let localClasses: any[] = [];
+  try {
+    const raw =
+      localStorage.getItem(`qllh_user_${cleanId}_classes`) ||
+      localStorage.getItem('qllh_classes_v52') ||
+      localStorage.getItem('qllh_classes');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) localClasses = p;
+    }
+  } catch {}
+
+  let deletedIds = new Set<string>();
+  try {
+    const d = localStorage.getItem('qllh_deleted_class_ids');
+    if (d) deletedIds = new Set(JSON.parse(d));
+  } catch {}
+
+  const map = new Map<string, any>();
+  // 1. Thêm từ server (bỏ qua những lớp đã bị bấm xóa)
+  (serverClasses || []).forEach((c) => {
+    if (c && c.id && !deletedIds.has(c.id)) {
+      map.set(c.id, c);
+    }
+  });
+  // 2. Hợp nhất từ local: nếu local có lớp mới mà server chưa kịp cập nhật, GIỮ NGUYÊN không được xóa!
+  (localClasses || []).forEach((c) => {
+    if (c && c.id && !deletedIds.has(c.id)) {
+      if (!map.has(c.id)) {
+        map.set(c.id, c);
+      } else {
+        map.set(c.id, { ...map.get(c.id), ...c });
+      }
+    }
+  });
+  return Array.from(map.values());
+}
+
+/**
+ * Hợp nhất an toàn danh sách học sinh giữa server và local
+ */
+export function mergeStudentsSafely(serverStudents: any[], userScope?: string): any[] {
+  const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+  let localStudents: any[] = [];
+  try {
+    const raw =
+      localStorage.getItem(`qllh_user_${cleanId}_students`) ||
+      localStorage.getItem('qllh_students_v52') ||
+      localStorage.getItem('qllh_students');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) localStudents = p;
+    }
+  } catch {}
+
+  let deletedIds = new Set<string>();
+  try {
+    const d = localStorage.getItem('qllh_deleted_student_ids');
+    if (d) deletedIds = new Set(JSON.parse(d));
+  } catch {}
+
+  const map = new Map<string, any>();
+  (serverStudents || []).forEach((s) => {
+    if (s && s.id && !deletedIds.has(s.id)) {
+      map.set(s.id, s);
+    }
+  });
+  (localStudents || []).forEach((s) => {
+    if (s && s.id && !deletedIds.has(s.id)) {
+      if (!map.has(s.id)) {
+        map.set(s.id, s);
+      } else {
+        map.set(s.id, { ...map.get(s.id), ...s });
+      }
+    }
+  });
+  return Array.from(map.values());
+}
+
+/**
+ * Hợp nhất an toàn danh sách tài khoản
+ */
+export function mergeAccountsSafely(serverAccounts: any[]): any[] {
+  let localAccounts: any[] = [];
+  try {
+    const raw = localStorage.getItem('qllh_user_accounts');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) localAccounts = p;
+    }
+  } catch {}
+
+  let deletedIds = new Set<string>();
+  try {
+    const d = localStorage.getItem('qllh_deleted_account_ids');
+    if (d) deletedIds = new Set(JSON.parse(d));
+  } catch {}
+
+  const map = new Map<string, any>();
+  (serverAccounts || []).forEach((a) => {
+    const key = a?.id || a?.username;
+    if (key && !deletedIds.has(key)) {
+      map.set(key, a);
+    }
+  });
+  (localAccounts || []).forEach((a) => {
+    const key = a?.id || a?.username;
+    if (key && !deletedIds.has(key)) {
+      if (!map.has(key)) {
+        map.set(key, a);
+      } else {
+        map.set(key, { ...map.get(key), ...a });
+      }
+    }
+  });
+  return Array.from(map.values());
+}
+
+/**
  * Đẩy toàn bộ dữ liệu (tài khoản, lớp, học sinh, điểm, TKB...) lên Firebase Firestore
  */
 export async function pushAllDataToFirestore(userScope?: string, accountsOverride?: any[]): Promise<boolean> {
@@ -258,43 +383,9 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
     if (existingSnap.exists()) {
       const serverData = existingSnap.data() as AppSyncData;
 
-      // Hợp nhất danh sách lớp: giữ tất cả lớp của mọi tài khoản và máy tính khác
-      if (serverData.classes && Array.isArray(serverData.classes)) {
-        const classMap = new Map<string, any>();
-        serverData.classes.forEach((c: any) => {
-          if (c && c.id) classMap.set(c.id, c);
-        });
-        finalClasses.forEach((c: any) => {
-          if (c && c.id) classMap.set(c.id, { ...(classMap.get(c.id) || {}), ...c });
-        });
-        finalClasses = Array.from(classMap.values());
-      }
-
-      // Hợp nhất danh sách học sinh: giữ tất cả học sinh của mọi lớp
-      if (serverData.students && Array.isArray(serverData.students)) {
-        const studentMap = new Map<string, any>();
-        serverData.students.forEach((s: any) => {
-          if (s && s.id) studentMap.set(s.id, s);
-        });
-        finalStudents.forEach((s: any) => {
-          if (s && s.id) studentMap.set(s.id, { ...(studentMap.get(s.id) || {}), ...s });
-        });
-        finalStudents = Array.from(studentMap.values());
-      }
-
-      // Hợp nhất danh sách tài khoản
-      if (serverData.accounts && Array.isArray(serverData.accounts)) {
-        const accMap = new Map<string, any>();
-        serverData.accounts.forEach((a: any) => {
-          if (a && a.id) accMap.set(a.id, a);
-          else if (a && a.username) accMap.set(a.username, a);
-        });
-        finalAccounts.forEach((a: any) => {
-          if (a && a.id) accMap.set(a.id, { ...(accMap.get(a.id) || {}), ...a });
-          else if (a && a.username) accMap.set(a.username, { ...(accMap.get(a.username) || {}), ...a });
-        });
-        finalAccounts = Array.from(accMap.values());
-      }
+      finalClasses = mergeClassesSafely(serverData.classes || [], userId);
+      finalStudents = mergeStudentsSafely(serverData.students || [], userId);
+      finalAccounts = mergeAccountsSafely(serverData.accounts || []);
 
       // Hợp nhất bảng điểm, tuần, đánh giá
       if (serverData.grades && typeof serverData.grades === 'object') {
@@ -341,19 +432,31 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
   };
 
   // 1. Luôn cập nhật vào tài liệu tập trung toàn trường global_data_v1
-  await setDoc(globalDocRef, payload, { merge: true });
-
-  // 2. Đồng thời lưu vào tài liệu riêng của user
-  const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
-  await setDoc(userDocRef, payload, { merge: true });
-
-  return true;
+  try {
+    await setDoc(globalDocRef, payload, { merge: true });
+    // 2. Đồng thời lưu vào tài liệu riêng của user
+    const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
+    await setDoc(userDocRef, payload, { merge: true });
+    return true;
+  } catch (err: any) {
+    console.warn('Lỗi ghi Firestore (dữ liệu vẫn an toàn trên thiết bị):', err?.message || err);
+    return false;
+  }
 }
 
 /**
  * Xóa vĩnh viễn một lớp học khỏi hệ thống và đồng bộ ngay lên Firestore
  */
 export async function deleteClassFromFirestore(classId: string): Promise<boolean> {
+  // Ghi nhận ngay vào danh sách đã xóa để merge không bao giờ khôi phục lại
+  try {
+    const d: string[] = JSON.parse(localStorage.getItem('qllh_deleted_class_ids') || '[]');
+    if (!d.includes(classId)) {
+      d.push(classId);
+      localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(d));
+    }
+  } catch {}
+
   const db = getFirebaseDb();
   if (!db) return false;
   try {
@@ -384,6 +487,14 @@ export async function deleteClassFromFirestore(classId: string): Promise<boolean
  * Xóa vĩnh viễn một học sinh khỏi hệ thống và đồng bộ ngay lên Firestore
  */
 export async function deleteStudentFromFirestore(studentId: string): Promise<boolean> {
+  try {
+    const d: string[] = JSON.parse(localStorage.getItem('qllh_deleted_student_ids') || '[]');
+    if (!d.includes(studentId)) {
+      d.push(studentId);
+      localStorage.setItem('qllh_deleted_student_ids', JSON.stringify(d));
+    }
+  } catch {}
+
   const db = getFirebaseDb();
   if (!db) return false;
   try {
@@ -473,6 +584,14 @@ export async function deleteYearFromFirestore(year: string): Promise<boolean> {
  * Xóa vĩnh viễn một tài khoản khỏi Firestore
  */
 export async function deleteAccountFromFirestore(accountId: string): Promise<boolean> {
+  try {
+    const d: string[] = JSON.parse(localStorage.getItem('qllh_deleted_account_ids') || '[]');
+    if (!d.includes(accountId)) {
+      d.push(accountId);
+      localStorage.setItem('qllh_deleted_account_ids', JSON.stringify(d));
+    }
+  } catch {}
+
   const db = getFirebaseDb();
   if (!db) return false;
   try {
@@ -531,8 +650,10 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
 
       // 1. Đồng bộ tài khoản người dùng
       if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
-        localStorage.setItem('qllh_user_accounts', JSON.stringify(data.accounts));
-        window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: data.accounts } }));
+        const mergedAccounts = mergeAccountsSafely(data.accounts);
+        localStorage.setItem('qllh_user_accounts', JSON.stringify(mergedAccounts));
+        data.accounts = mergedAccounts;
+        window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: mergedAccounts } }));
       }
 
       // 2. Đồng bộ phân quyền học sinh
@@ -540,22 +661,35 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
         localStorage.setItem('qllh_student_permissions', JSON.stringify(data.permissions));
       }
 
-      // 3. Đồng bộ danh sách lớp học
-      if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
-        localStorage.setItem(userClassesKey, JSON.stringify(data.classes));
-        localStorage.setItem('qllh_classes_v52', JSON.stringify(data.classes));
-        localStorage.setItem('qllh_classes', JSON.stringify(data.classes));
-        localStorage.setItem('qllh_classes_v50', JSON.stringify(data.classes));
-        localStorage.setItem('qllh_user_u_admin_classes', JSON.stringify(data.classes));
+      // 3. Đồng bộ danh sách lớp học (Hợp nhất an toàn, không bao giờ mất lớp khi F5)
+      if (data.classes && Array.isArray(data.classes)) {
+        const mergedClasses = mergeClassesSafely(data.classes, userId);
+        localStorage.setItem(userClassesKey, JSON.stringify(mergedClasses));
+        localStorage.setItem('qllh_classes_v52', JSON.stringify(mergedClasses));
+        localStorage.setItem('qllh_classes', JSON.stringify(mergedClasses));
+        localStorage.setItem('qllh_classes_v50', JSON.stringify(mergedClasses));
+        localStorage.setItem('qllh_user_u_admin_classes', JSON.stringify(mergedClasses));
+        
+        // Nếu local có lớp mới mà server chưa kịp lưu, tự động đẩy ngược lên Firestore
+        if (mergedClasses.length > data.classes.length) {
+          pushAllDataToFirestore(userId).catch(() => {});
+        }
+        data.classes = mergedClasses;
       }
 
-      // 4. Đồng bộ danh sách học sinh
+      // 4. Đồng bộ danh sách học sinh (Hợp nhất an toàn)
       if (data.students && Array.isArray(data.students)) {
-        localStorage.setItem(userStudentsKey, JSON.stringify(data.students));
-        localStorage.setItem('qllh_students_v52', JSON.stringify(data.students));
-        localStorage.setItem('qllh_students', JSON.stringify(data.students));
-        localStorage.setItem('qllh_students_v50', JSON.stringify(data.students));
-        localStorage.setItem('qllh_user_u_admin_students', JSON.stringify(data.students));
+        const mergedStudents = mergeStudentsSafely(data.students, userId);
+        localStorage.setItem(userStudentsKey, JSON.stringify(mergedStudents));
+        localStorage.setItem('qllh_students_v52', JSON.stringify(mergedStudents));
+        localStorage.setItem('qllh_students', JSON.stringify(mergedStudents));
+        localStorage.setItem('qllh_students_v50', JSON.stringify(mergedStudents));
+        localStorage.setItem('qllh_user_u_admin_students', JSON.stringify(mergedStudents));
+
+        if (mergedStudents.length > data.students.length) {
+          pushAllDataToFirestore(userId).catch(() => {});
+        }
+        data.students = mergedStudents;
       }
 
       // 5. Đồng bộ bảng điểm
@@ -654,35 +788,51 @@ export function subscribeToFirestoreData(
       globalDocRef,
       (snap) => {
         if (snap.exists()) {
-          const data = snap.data() as AppSyncData;
+          const rawData = snap.data() as AppSyncData;
+          const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-          // Cập nhật localStorage cho các dữ liệu quan trọng
-          if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
-            localStorage.setItem('qllh_user_accounts', JSON.stringify(data.accounts));
-            window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: data.accounts } }));
+          // Hợp nhất tài khoản an toàn
+          let finalAccounts = rawData.accounts || [];
+          if (Array.isArray(rawData.accounts) && rawData.accounts.length > 0) {
+            finalAccounts = mergeAccountsSafely(rawData.accounts);
+            localStorage.setItem('qllh_user_accounts', JSON.stringify(finalAccounts));
+            window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: finalAccounts } }));
           }
 
-          if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
-            localStorage.setItem('qllh_classes_v52', JSON.stringify(data.classes));
-            localStorage.setItem('qllh_classes', JSON.stringify(data.classes));
-            const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
-            localStorage.setItem(`qllh_user_${cleanId}_classes`, JSON.stringify(data.classes));
+          // Hợp nhất lớp học an toàn (KHÔNG BAO GIỜ XÓA MẤT LỚP MỚI TẠO CỦA USER KHI F5 HOẶC SNAPSHOT)
+          let finalClasses = rawData.classes || [];
+          if (Array.isArray(rawData.classes)) {
+            finalClasses = mergeClassesSafely(rawData.classes, userScope);
+            localStorage.setItem('qllh_classes_v52', JSON.stringify(finalClasses));
+            localStorage.setItem('qllh_classes', JSON.stringify(finalClasses));
+            localStorage.setItem(`qllh_user_${cleanId}_classes`, JSON.stringify(finalClasses));
+            localStorage.setItem('qllh_user_u_admin_classes', JSON.stringify(finalClasses));
           }
 
-          if (data.students && Array.isArray(data.students)) {
-            localStorage.setItem('qllh_students_v52', JSON.stringify(data.students));
-            localStorage.setItem('qllh_students', JSON.stringify(data.students));
-            const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
-            localStorage.setItem(`qllh_user_${cleanId}_students`, JSON.stringify(data.students));
+          // Hợp nhất học sinh an toàn
+          let finalStudents = rawData.students || [];
+          if (Array.isArray(rawData.students)) {
+            finalStudents = mergeStudentsSafely(rawData.students, userScope);
+            localStorage.setItem('qllh_students_v52', JSON.stringify(finalStudents));
+            localStorage.setItem('qllh_students', JSON.stringify(finalStudents));
+            localStorage.setItem(`qllh_user_${cleanId}_students`, JSON.stringify(finalStudents));
+            localStorage.setItem('qllh_user_u_admin_students', JSON.stringify(finalStudents));
           }
 
-          if (data.currentYear) {
-            localStorage.setItem('qllh_current_year', data.currentYear);
+          if (rawData.currentYear) {
+            localStorage.setItem('qllh_current_year', rawData.currentYear);
           }
+
+          const safeData: AppSyncData = {
+            ...rawData,
+            accounts: finalAccounts,
+            classes: finalClasses,
+            students: finalStudents,
+          };
 
           // Kích hoạt callback và dispatch event cho các component
-          onUpdate(data);
-          window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'cloud_sync', data } }));
+          onUpdate(safeData);
+          window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'cloud_sync', data: safeData } }));
         }
       },
       (err) => {
