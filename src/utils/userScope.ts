@@ -45,19 +45,19 @@ export function getUserScopeId(user?: UserAccount | string | null): string {
 export function isClassVisibleForUser(
   cls: ClassItemLike | null | undefined,
   user?: UserAccount | string | null,
-  adminViewAll = false
+  adminViewAll = true
 ): boolean {
   if (!cls) return false;
 
   const currentScope = getUserScopeId(user);
+  const isActuallyAdmin =
+    (typeof user === 'object' && user?.role === 'admin') ||
+    currentScope === 'u_admin' ||
+    currentScope === 'trungkienkd2025';
 
-  // Nếu là Quản trị viên và chủ động bật chế độ "Xem tổng thể toàn trường":
-  if (adminViewAll) {
-    const isActuallyAdmin =
-      (typeof user === 'object' && user?.role === 'admin') ||
-      currentScope === 'u_admin' ||
-      currentScope === 'trungkienkd2025';
-    if (isActuallyAdmin) return true;
+  // Quản trị viên (Thầy Kiên / Admin) mặc định xem được tất cả các lớp của toàn trường trên mọi máy tính
+  if (isActuallyAdmin && adminViewAll) {
+    return true;
   }
 
   // Dữ liệu cũ trước đây chưa gắn createdBy sẽ mặc định thuộc về Quản trị viên chính
@@ -68,7 +68,7 @@ export function isClassVisibleForUser(
   const isMatchId = userObj?.id ? classCreator === userObj.id : false;
   const isMatchUsername = userObj?.username ? classCreator === userObj.username : false;
 
-  return isMatchScope || isMatchId || isMatchUsername;
+  return isMatchScope || isMatchId || isMatchUsername || isActuallyAdmin;
 }
 
 /**

@@ -408,8 +408,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     }
   }, [selectedEvalStudentId, currentWeek, evalData]);
 
-  // Admin toggle to view all teachers' classes or only personal classes
-  const [adminViewAll, setAdminViewAll] = useState(false);
+  // Admin toggle to view all teachers' classes or only personal classes (mặc định xem tất cả để đồng nhất trên mọi máy tính)
+  const [adminViewAll, setAdminViewAll] = useState(true);
 
   // Chuẩn hóa dữ liệu lớp cũ chưa có createdBy
   const normalizedClasses = useMemo(() => {
@@ -1223,12 +1223,12 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         setStudentsData(updatedStudents);
         setStudentSortType('default');
         setGradeSortType('default');
+        setCurrentView('detail');
+        setSubTab('student');
 
         // 2. Đồng bộ currentClassId nếu cần
-        if (currentClassId !== targetClassId) {
-          setCurrentClassId(targetClassId);
-          if (onSelectClassExternal) onSelectClassExternal(targetClassId);
-        }
+        setCurrentClassId(targetClassId);
+        if (onSelectClassExternal) onSelectClassExternal(targetClassId);
 
         // 3. Tự động chọn học sinh đầu tiên cho phần đánh giá nếu chưa có
         if (!selectedEvalStudentId && newStudents.length > 0) {

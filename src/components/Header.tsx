@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, QrCode, Copy, Check, Download, ShieldCheck, Key, LogOut } from 'lucide-react';
+import { Menu, QrCode, Copy, Check, Download, ShieldCheck, Key, LogOut, RefreshCw } from 'lucide-react';
 import { UserAccount } from '../types';
 
 interface HeaderProps {
@@ -13,6 +13,9 @@ interface HeaderProps {
   onOpenLogin?: () => void;
   onLogout?: () => void;
   onSwitchToStudentPortal?: () => void;
+  isCloudConnected?: boolean;
+  isSyncingCloud?: boolean;
+  onManualSyncCloud?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLogin,
   onLogout,
   onSwitchToStudentPortal,
+  isCloudConnected = true,
+  isSyncingCloud = false,
+  onManualSyncCloud,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -71,6 +77,18 @@ export const Header: React.FC<HeaderProps> = ({
             {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
           </button>
         </div>
+
+        {onManualSyncCloud && (
+          <button
+            type="button"
+            onClick={onManualSyncCloud}
+            disabled={isSyncingCloud}
+            className="p-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors flex items-center justify-center cursor-pointer shadow-2xs"
+            title="Đồng bộ ngay CSDL đám mây"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin text-blue-600' : ''}`} />
+          </button>
+        )}
 
         {onSwitchToStudentPortal && (
           <button

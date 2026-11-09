@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { HomeDashboard } from './components/HomeDashboard';
@@ -40,6 +41,7 @@ import {
   fetchAllDataFromFirestore,
   subscribeToFirestoreData,
   pushAllDataToFirestore,
+  pushAccountsToFirestore,
 } from './firebase';
 import { getUserScopeId } from './utils/userScope';
 import { getSavedClasses, getSavedStudents, getSavedCurrentYear } from './utils/dbStorage';
@@ -115,10 +117,22 @@ export default function App() {
 
   const isAdmin = currentUser.role === 'admin';
 
-  // Sync to local storage
+  // Sync to local storage & cloud
   useEffect(() => {
     localStorage.setItem('qllh_user_accounts', JSON.stringify(accounts));
+    pushAccountsToFirestore(accounts);
   }, [accounts]);
+
+  // Lắng nghe sự kiện cập nhật tài khoản từ đám mây (Firestore)
+  useEffect(() => {
+    const handleAccountsSync = (e: any) => {
+      if (e.detail?.accounts && Array.isArray(e.detail.accounts) && e.detail.accounts.length > 0) {
+        setAccounts(e.detail.accounts);
+      }
+    };
+    window.addEventListener('qllh_accounts_updated', handleAccountsSync);
+    return () => window.removeEventListener('qllh_accounts_updated', handleAccountsSync);
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -134,30 +148,108 @@ export default function App() {
     localStorage.setItem('qllh_active_tab', activeTab);
   }, [activeTab]);
 
-  // Automatic Cloud Sync via Firebase Firestore (cách ly độc lập theo từng tài khoản)
+  // Automatic Cloud Sync via Firebase Firestore - CSDL THỐNG NHẤT TRÊN TẤT CẢ MÁY TÍNH
   const [isCloudConnected, setIsCloudConnected] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
 
   useEffect(() => {
     const { db } = initFirebase();
     if (db) {
       setIsCloudConnected(true);
       const scope = getUserScopeId(currentUser);
-      const userClasses = getSavedClasses(scope);
-      const userStudents = getSavedStudents(scope);
-      const isLocalEmpty = userClasses.length === 0 && userStudents.length === 0;
 
-      if (isLocalEmpty && (scope === 'u_admin' || scope === 'trungkienkd2025')) {
-        fetchAllDataFromFirestore(scope).then((cloudData) => {
-          if (!cloudData) {
-            pushAllDataToFirestore(scope).catch((err) => console.warn('Could not auto-seed Firestore:', err));
+      setIsSyncingCloud(true);
+      fetchAllDataFromFirestore(scope)
+        .then((cloudData) => {
+          setIsSyncingCloud(false);
+          if (cloudData) {
+            if (cloudData.accounts && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
+              setAccounts(cloudData.accounts);
+            }
+            if (cloudData.permissions) {
+              setPermissions(cloudData.permissions);
+            }
+            if (cloudData.classes && Array.isArray(cloudData.classes) && cloudData.classes.length > 0) {
+              setClassrooms(
+                cloudData.classes.map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                  grade: parseInt(c.grade?.toString().replace(/\D/g, '') || '1', 10),
+                  academicYear: c.year || '2026-2027',
+                  totalStudents: 0,
+                  roomCode: 'F08AF1',
+                }))
+              );
+            }
+            if (cloudData.students && Array.isArray(cloudData.students)) {
+              setStudents(
+                cloudData.students.map((s: any, idx: number) => ({
+                  id: s.id,
+                  code: s.code || `HS${idx + 1}`,
+                  name: s.name,
+                  gender: s.gender === 'Nữ' ? 'Nữ' : 'Nam',
+                  dob: s.dob || '',
+                  avatar: s.gender === 'Nữ' ? '👧' : '👦',
+                  classId: s.classId,
+                  attendance: s.attendance || 'present',
+                  stars: s.stars || 0,
+                  speeches: s.speeches || 0,
+                  notes: s.note,
+                }))
+              );
+            }
+            if (cloudData.currentYear) {
+              setSelectedYear(cloudData.currentYear);
+            }
+          } else {
+            pushAllDataToFirestore(scope, accounts).catch(() => {});
           }
+        })
+        .catch(() => {
+          setIsSyncingCloud(false);
         });
-      }
 
-      // Realtime listener cho CSDL của tài khoản này
+      // Lắng nghe dữ liệu thời gian thực từ Firestore từ tất cả các máy tính khác
       const unsubscribe = subscribeToFirestoreData((updated) => {
-        if (updated && updated.currentYear) {
-          setSelectedYear(updated.currentYear);
+        if (updated) {
+          if (updated.accounts && Array.isArray(updated.accounts) && updated.accounts.length > 0) {
+            setAccounts(updated.accounts);
+          }
+          if (updated.permissions) {
+            setPermissions(updated.permissions);
+          }
+          if (updated.classes && Array.isArray(updated.classes) && updated.classes.length > 0) {
+            setClassrooms(
+              updated.classes.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                grade: parseInt(c.grade?.toString().replace(/\D/g, '') || '1', 10),
+                academicYear: c.year || '2026-2027',
+                totalStudents: 0,
+                roomCode: 'F08AF1',
+              }))
+            );
+          }
+          if (updated.students && Array.isArray(updated.students)) {
+            setStudents(
+              updated.students.map((s: any, idx: number) => ({
+                id: s.id,
+                code: s.code || `HS${idx + 1}`,
+                name: s.name,
+                gender: s.gender === 'Nữ' ? 'Nữ' : 'Nam',
+                dob: s.dob || '',
+                avatar: s.gender === 'Nữ' ? '👧' : '👦',
+                classId: s.classId,
+                attendance: s.attendance || 'present',
+                stars: s.stars || 0,
+                speeches: s.speeches || 0,
+                notes: s.note,
+              }))
+            );
+          }
+          if (updated.currentYear) {
+            setSelectedYear(updated.currentYear);
+          }
         }
       }, scope);
 
@@ -166,6 +258,79 @@ export default function App() {
       };
     }
   }, [currentUser?.id, currentUser?.username]);
+
+  const [syncToast, setSyncToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({
+    show: false,
+    message: '',
+    type: 'success',
+  });
+
+  // Hành động chủ động bấm đồng bộ đám mây bằng tay (Manual Sync)
+  const handleManualSyncCloud = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const scope = getUserScopeId(currentUser);
+      await pushAllDataToFirestore(scope, accounts);
+      const data = await fetchAllDataFromFirestore(scope);
+      if (data) {
+        if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
+          setAccounts(data.accounts);
+        }
+        if (data.permissions) {
+          setPermissions(data.permissions);
+        }
+        if (data.currentYear) {
+          setSelectedYear(data.currentYear);
+        }
+        if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+          setClassrooms(
+            data.classes.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              grade: parseInt(c.grade?.toString().replace(/\D/g, '') || '1', 10),
+              academicYear: c.year || '2026-2027',
+              totalStudents: 0,
+              roomCode: 'F08AF1',
+            }))
+          );
+        }
+        if (data.students && Array.isArray(data.students)) {
+          setStudents(
+            data.students.map((s: any, idx: number) => ({
+              id: s.id,
+              code: s.code || `HS${idx + 1}`,
+              name: s.name,
+              gender: s.gender === 'Nữ' ? 'Nữ' : 'Nam',
+              dob: s.dob || '',
+              avatar: s.gender === 'Nữ' ? '👧' : '👦',
+              classId: s.classId,
+              attendance: s.attendance || 'present',
+              stars: s.stars || 0,
+              speeches: s.speeches || 0,
+              notes: s.note,
+            }))
+          );
+        }
+        window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'manual_sync' } }));
+      }
+      setSyncToast({
+        show: true,
+        message: 'Đã đồng bộ thành công CSDL từ đám mây Firestore! Tài khoản, lớp học và học sinh đã thống nhất.',
+        type: 'success',
+      });
+      setTimeout(() => setSyncToast({ show: false, message: '', type: 'success' }), 4000);
+    } catch (e) {
+      console.error('Manual sync error:', e);
+      setSyncToast({
+        show: true,
+        message: 'Lỗi đồng bộ đám mây Firestore. Vui lòng kiểm tra kết nối mạng.',
+        type: 'error',
+      });
+      setTimeout(() => setSyncToast({ show: false, message: '', type: 'error' }), 4000);
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   // Core application data state theo tài khoản người dùng
   const [classrooms, setClassrooms] = useState<Classroom[]>(() => {
@@ -464,6 +629,9 @@ export default function App() {
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onSwitchToStudentPortal={() => setViewMode('portal')}
+        isCloudConnected={isCloudConnected}
+        isSyncingCloud={isSyncingCloud}
+        onManualSyncCloud={handleManualSyncCloud}
       />
 
       <div className="flex-1 flex">
@@ -507,6 +675,9 @@ export default function App() {
             setActiveTab('classroom');
           }}
           onOpenBackup={() => setIsBackupModalOpen(true)}
+          isCloudConnected={isCloudConnected}
+          isSyncingCloud={isSyncingCloud}
+          onManualSyncCloud={handleManualSyncCloud}
         />
 
         {/* Main Content Area */}
@@ -521,9 +692,16 @@ export default function App() {
                 <span className="hidden md:inline">
                   Học sinh truy cập trang web và nhập mã <strong>{roomCode}</strong>.
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 bg-emerald-500/30 text-emerald-100 text-[11px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30">
-                  🛡️ CSDL: Đã lưu an toàn
-                </span>
+                <button
+                  type="button"
+                  onClick={handleManualSyncCloud}
+                  disabled={isSyncingCloud}
+                  className="inline-flex items-center gap-1.5 bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-100 text-[11px] font-bold px-2.5 py-1 rounded-md border border-emerald-400/40 cursor-pointer transition active:scale-95 disabled:opacity-60"
+                  title="Bấm để đồng bộ dữ liệu ngay lập tức với đám mây Firestore"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingCloud ? 'Đang đồng bộ...' : '☁️ CSDL Đám mây: Đồng bộ mọi máy'}</span>
+                </button>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -672,6 +850,18 @@ export default function App() {
         onClose={() => setIsBackupModalOpen(false)}
         currentUser={currentUser}
       />
+
+      {/* Cloud Sync Toast Notification */}
+      {syncToast.show && (
+        <div className="fixed bottom-5 right-5 z-[200] max-w-md bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-3 backdrop-blur-md transition-all">
+          <div
+            className={`w-3 h-3 rounded-full shrink-0 ${
+              syncToast.type === 'success' ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-rose-400'
+            }`}
+          />
+          <p className="text-xs font-semibold leading-relaxed">{syncToast.message}</p>
+        </div>
+      )}
     </div>
   );
 }

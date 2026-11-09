@@ -103,9 +103,16 @@ export function isFirebaseConfigured(): boolean {
 // HỖ TRỢ CƠ SỞ DỮ LIỆU ĐỘC LẬP TỪNG TÀI KHOẢN (ISOLATED CLOUD DB)
 // ========================================================
 
+// ========================================================
+// CÁC HÀM ĐỒNG BỘ CƠ SỞ DỮ LIỆU ĐÁM MÂY THỜI GIAN THỰC (FIRESTORE)
+// ĐẢM BẢO TẤT CẢ THIẾT BỊ / MÁY TÍNH CÙNG CHUNG MỘT CSDL THỐNG NHẤT
+// ========================================================
+
 const APP_DATA_DOC = 'global_data_v1';
 
 export interface AppSyncData {
+  accounts?: any[];
+  permissions?: any;
   classes: any[];
   students: any[];
   grades: Record<string, any>;
@@ -115,8 +122,12 @@ export interface AppSyncData {
   years: string[];
   currentYear: string;
   submissions?: any[];
+  commentsT?: string[];
+  commentsH?: string[];
+  quizBank?: any[];
   ownerId?: string;
   updatedAt: string;
+  lastUpdatedBy?: string;
 }
 
 export function getUserDataDocId(userScope?: string): string {
@@ -125,9 +136,35 @@ export function getUserDataDocId(userScope?: string): string {
 }
 
 /**
- * Đẩy toàn bộ dữ liệu của tài khoản hiện tại lên Firebase Firestore độc lập
+ * Đẩy riêng danh sách tài khoản người dùng lên Firestore để mọi thiết bị lập tức có chung tài khoản
  */
-export async function pushAllDataToFirestore(userScope?: string): Promise<boolean> {
+export async function pushAccountsToFirestore(accounts: any[]): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db || !Array.isArray(accounts)) return false;
+
+  try {
+    const payload = {
+      accounts,
+      updatedAt: new Date().toISOString(),
+    };
+    // 1. Cập nhật vào global_data_v1
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    await setDoc(globalDocRef, payload, { merge: true });
+
+    // 2. Ghi song song vào tài liệu accounts hệ thống để sao lưu độc lập
+    const sysDocRef = doc(db, 'qllh_system', 'accounts');
+    await setDoc(sysDocRef, payload, { merge: true });
+    return true;
+  } catch (err) {
+    console.warn('Lỗi pushAccountsToFirestore:', err);
+    return false;
+  }
+}
+
+/**
+ * Đẩy toàn bộ dữ liệu (tài khoản, lớp, học sinh, điểm, TKB...) lên Firebase Firestore
+ */
+export async function pushAllDataToFirestore(userScope?: string, accountsOverride?: any[]): Promise<boolean> {
   const db = getFirebaseDb();
   if (!db) {
     throw new Error('Chưa thể kết nối tới Firebase Firestore.');
@@ -144,71 +181,96 @@ export async function pushAllDataToFirestore(userScope?: string): Promise<boolea
   const userYearsKey = `qllh_user_${cleanId}_years`;
   const userCurrentYearKey = `qllh_user_${cleanId}_current_year`;
 
+  const getStoredAccounts = () => {
+    if (accountsOverride && Array.isArray(accountsOverride) && accountsOverride.length > 0) {
+      return accountsOverride;
+    }
+    try {
+      const a = localStorage.getItem('qllh_user_accounts');
+      if (a) return JSON.parse(a);
+    } catch {}
+    return [];
+  };
+
   const getStoredClasses = () => {
     try {
       const u = localStorage.getItem(userClassesKey);
-      if (u) return JSON.parse(u);
-      if (userId === 'u_admin' || userId === 'trungkienkd2025') {
-        const v = localStorage.getItem('qllh_classes_v52') || localStorage.getItem('qllh_classes');
-        return v ? JSON.parse(v) : [];
+      if (u) {
+        const p = JSON.parse(u);
+        if (Array.isArray(p) && p.length > 0) return p;
       }
-      return [];
-    } catch { return []; }
+    } catch {}
+    try {
+      const v = localStorage.getItem('qllh_classes_v52') || localStorage.getItem('qllh_classes') || localStorage.getItem('qllh_classes_v50');
+      if (v) {
+        const p = JSON.parse(v);
+        if (Array.isArray(p) && p.length > 0) return p;
+      }
+    } catch {}
+    return [];
   };
 
   const getStoredStudents = () => {
     try {
       const u = localStorage.getItem(userStudentsKey);
-      if (u) return JSON.parse(u);
-      if (userId === 'u_admin' || userId === 'trungkienkd2025') {
-        const v = localStorage.getItem('qllh_students_v52') || localStorage.getItem('qllh_students');
-        return v ? JSON.parse(v) : [];
+      if (u) {
+        const p = JSON.parse(u);
+        if (Array.isArray(p) && p.length > 0) return p;
       }
-      return [];
-    } catch { return []; }
+    } catch {}
+    try {
+      const v = localStorage.getItem('qllh_students_v52') || localStorage.getItem('qllh_students') || localStorage.getItem('qllh_students_v50');
+      if (v) {
+        const p = JSON.parse(v);
+        if (Array.isArray(p) && p.length > 0) return p;
+      }
+    } catch {}
+    return [];
   };
 
   const getStoredGrades = () => {
     try {
       const u = localStorage.getItem(userGradesKey);
       if (u) return JSON.parse(u);
-      if (userId === 'u_admin' || userId === 'trungkienkd2025') {
-        const v = localStorage.getItem('qllh_grade_v52') || localStorage.getItem('qllh_grade');
-        return v ? JSON.parse(v) : {};
-      }
-      return {};
-    } catch { return {}; }
+      const v = localStorage.getItem('qllh_grade_v52') || localStorage.getItem('qllh_grade');
+      if (v) return JSON.parse(v);
+    } catch {}
+    return {};
   };
 
   const payload: AppSyncData = {
+    accounts: getStoredAccounts(),
+    permissions: JSON.parse(localStorage.getItem('qllh_student_permissions') || 'null'),
     classes: getStoredClasses(),
     students: getStoredStudents(),
     grades: getStoredGrades(),
-    timetable: JSON.parse(localStorage.getItem(userTimetableKey) || localStorage.getItem(`qllh_timetable_${cleanId}`) || '[]'),
-    weeks: JSON.parse(localStorage.getItem(userWeeksKey) || '{}'),
-    evals: JSON.parse(localStorage.getItem(userEvalsKey) || '{}'),
-    years: JSON.parse(localStorage.getItem(userYearsKey) || '["2026-2027", "2025-2026"]'),
-    currentYear: localStorage.getItem(userCurrentYearKey) || '2026-2027',
+    timetable: JSON.parse(localStorage.getItem(userTimetableKey) || localStorage.getItem(`qllh_timetable_${cleanId}`) || localStorage.getItem('qllh_timetable_matrix') || '[]'),
+    weeks: JSON.parse(localStorage.getItem(userWeeksKey) || localStorage.getItem('qllh_weeks_v52') || '{}'),
+    evals: JSON.parse(localStorage.getItem(userEvalsKey) || localStorage.getItem('qllh_eval_v52') || '{}'),
+    years: JSON.parse(localStorage.getItem(userYearsKey) || localStorage.getItem('qllh_years') || '["2026-2027", "2025-2026"]'),
+    currentYear: localStorage.getItem(userCurrentYearKey) || localStorage.getItem('qllh_current_year') || '2026-2027',
     submissions: JSON.parse(localStorage.getItem('qllh_quiz_submissions') || '[]'),
+    quizBank: JSON.parse(localStorage.getItem('qllh_quiz_bank') || '[]'),
+    commentsT: JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t`) || localStorage.getItem('qllh_custom_comments_t') || '[]'),
+    commentsH: JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h`) || localStorage.getItem('qllh_custom_comments_h') || '[]'),
     ownerId: userId,
     updatedAt: new Date().toISOString(),
+    lastUpdatedBy: userId,
   };
 
-  // Lưu vào tài liệu độc lập của tài khoản
+  // 1. Luôn cập nhật vào tài liệu tập trung toàn trường global_data_v1
+  const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+  await setDoc(globalDocRef, payload, { merge: true });
+
+  // 2. Đồng thời lưu vào tài liệu riêng của user
   const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
   await setDoc(userDocRef, payload, { merge: true });
-
-  // Nếu là tài khoản Quản trị viên tối cao (Thầy Kiên), cập nhật tài liệu global_data_v1
-  if (userId === 'u_admin' || userId === 'trungkienkd2025') {
-    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-    await setDoc(globalDocRef, payload, { merge: true });
-  }
 
   return true;
 }
 
 /**
- * Tải toàn bộ dữ liệu từ Firebase Firestore về localStorage của tài khoản hiện tại
+ * Tải toàn bộ dữ liệu thống nhất từ Firebase Firestore về thiết bị hiện tại
  */
 export async function fetchAllDataFromFirestore(userScope?: string): Promise<AppSyncData | null> {
   const db = getFirebaseDb();
@@ -226,58 +288,100 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
   const userCurrentYearKey = `qllh_user_${cleanId}_current_year`;
 
   try {
-    // 1. Thử đọc từ tài liệu riêng của user
-    const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
-    let snap = await getDoc(userDocRef);
+    // 1. Ưu tiên đọc từ tài liệu tập trung toàn trường global_data_v1
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    let snap = await getDoc(globalDocRef);
 
-    // 2. Nếu chưa có và là admin, đọc từ global_data_v1
-    if (!snap.exists() && (userId === 'u_admin' || userId === 'trungkienkd2025')) {
-      const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-      snap = await getDoc(globalDocRef);
+    // 2. Nếu global chưa có, thử đọc từ tài liệu user
+    if (!snap.exists()) {
+      const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
+      snap = await getDoc(userDocRef);
     }
 
     if (snap.exists()) {
       const data = snap.data() as AppSyncData;
-      // Ghi an toàn vào storage riêng của user
-      if (data.classes && Array.isArray(data.classes)) {
-        localStorage.setItem(userClassesKey, JSON.stringify(data.classes));
-        if (userId === 'u_admin') {
-          localStorage.setItem('qllh_classes_v52', JSON.stringify(data.classes));
-          localStorage.setItem('qllh_classes', JSON.stringify(data.classes));
-        }
+
+      // 1. Đồng bộ tài khoản người dùng
+      if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
+        localStorage.setItem('qllh_user_accounts', JSON.stringify(data.accounts));
+        window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: data.accounts } }));
       }
+
+      // 2. Đồng bộ phân quyền học sinh
+      if (data.permissions && typeof data.permissions === 'object') {
+        localStorage.setItem('qllh_student_permissions', JSON.stringify(data.permissions));
+      }
+
+      // 3. Đồng bộ danh sách lớp học
+      if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+        localStorage.setItem(userClassesKey, JSON.stringify(data.classes));
+        localStorage.setItem('qllh_classes_v52', JSON.stringify(data.classes));
+        localStorage.setItem('qllh_classes', JSON.stringify(data.classes));
+        localStorage.setItem('qllh_classes_v50', JSON.stringify(data.classes));
+        localStorage.setItem('qllh_user_u_admin_classes', JSON.stringify(data.classes));
+      }
+
+      // 4. Đồng bộ danh sách học sinh
       if (data.students && Array.isArray(data.students)) {
         localStorage.setItem(userStudentsKey, JSON.stringify(data.students));
-        if (userId === 'u_admin') {
-          localStorage.setItem('qllh_students_v52', JSON.stringify(data.students));
-          localStorage.setItem('qllh_students', JSON.stringify(data.students));
-        }
+        localStorage.setItem('qllh_students_v52', JSON.stringify(data.students));
+        localStorage.setItem('qllh_students', JSON.stringify(data.students));
+        localStorage.setItem('qllh_students_v50', JSON.stringify(data.students));
+        localStorage.setItem('qllh_user_u_admin_students', JSON.stringify(data.students));
       }
+
+      // 5. Đồng bộ bảng điểm
       if (data.grades && typeof data.grades === 'object') {
         localStorage.setItem(userGradesKey, JSON.stringify(data.grades));
-        if (userId === 'u_admin') {
-          localStorage.setItem('qllh_grade_v52', JSON.stringify(data.grades));
-        }
+        localStorage.setItem('qllh_grade_v52', JSON.stringify(data.grades));
+        localStorage.setItem('qllh_grade', JSON.stringify(data.grades));
       }
+
+      // 6. Đồng bộ thời khóa biểu
       if (data.timetable && Array.isArray(data.timetable)) {
         localStorage.setItem(userTimetableKey, JSON.stringify(data.timetable));
         localStorage.setItem(`qllh_timetable_${cleanId}`, JSON.stringify(data.timetable));
+        localStorage.setItem('qllh_timetable_matrix', JSON.stringify(data.timetable));
       }
+
+      // 7. Đồng bộ tuần và đánh giá
       if (data.weeks && typeof data.weeks === 'object') {
         localStorage.setItem(userWeeksKey, JSON.stringify(data.weeks));
+        localStorage.setItem('qllh_weeks_v52', JSON.stringify(data.weeks));
       }
       if (data.evals && typeof data.evals === 'object') {
         localStorage.setItem(userEvalsKey, JSON.stringify(data.evals));
+        localStorage.setItem('qllh_eval_v52', JSON.stringify(data.evals));
       }
+
+      // 8. Đồng bộ năm học
       if (data.years && Array.isArray(data.years)) {
         localStorage.setItem(userYearsKey, JSON.stringify(data.years));
+        localStorage.setItem('qllh_years', JSON.stringify(data.years));
       }
       if (data.currentYear) {
         localStorage.setItem(userCurrentYearKey, data.currentYear);
+        localStorage.setItem('qllh_current_year', data.currentYear);
       }
-      if (data.submissions && data.submissions.length > 0) {
+
+      // 9. Đồng bộ nhận xét & bài nộp
+      if (data.commentsT && Array.isArray(data.commentsT)) {
+        localStorage.setItem(`qllh_user_${cleanId}_comments_t`, JSON.stringify(data.commentsT));
+        localStorage.setItem('qllh_custom_comments_t', JSON.stringify(data.commentsT));
+      }
+      if (data.commentsH && Array.isArray(data.commentsH)) {
+        localStorage.setItem(`qllh_user_${cleanId}_comments_h`, JSON.stringify(data.commentsH));
+        localStorage.setItem('qllh_custom_comments_h', JSON.stringify(data.commentsH));
+      }
+      if (data.quizBank && Array.isArray(data.quizBank)) {
+        localStorage.setItem('qllh_quiz_bank', JSON.stringify(data.quizBank));
+      }
+      if (data.submissions && Array.isArray(data.submissions)) {
         localStorage.setItem('qllh_quiz_submissions', JSON.stringify(data.submissions));
       }
+
+      // Phát sự kiện để toàn bộ giao diện cập nhật ngay lập tức
+      window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'cloud_sync', data } }));
       return data;
     }
   } catch (err) {
@@ -291,12 +395,10 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
  */
 export async function syncQuizSubmissionToFirestore(submission: any): Promise<void> {
   try {
-    // 1. Lưu local trước
     const existing: any[] = JSON.parse(localStorage.getItem('qllh_quiz_submissions') || '[]');
     const updated = [submission, ...existing.filter((s) => s.id !== submission.id)];
     localStorage.setItem('qllh_quiz_submissions', JSON.stringify(updated));
 
-    // 2. Đẩy lên Firestore nếu có kết nối
     const db = getFirebaseDb();
     if (db) {
       const docRef = doc(db, 'qllh_data', APP_DATA_DOC);
@@ -308,7 +410,7 @@ export async function syncQuizSubmissionToFirestore(submission: any): Promise<vo
 }
 
 /**
- * Lắng nghe thay đổi dữ liệu thời gian thực từ Firestore của tài khoản
+ * Lắng nghe thay đổi dữ liệu thời gian thực từ Firestore của toàn bộ hệ thống
  */
 export function subscribeToFirestoreData(
   onUpdate: (data: AppSyncData) => void,
@@ -317,20 +419,42 @@ export function subscribeToFirestoreData(
   const db = getFirebaseDb();
   if (!db) return null;
 
-  const userId = userScope || 'u_admin';
-
   try {
-    const docRef =
-      userId === 'u_admin' || userId === 'trungkienkd2025'
-        ? doc(db, 'qllh_data', APP_DATA_DOC)
-        : doc(db, 'qllh_user_data', getUserDataDocId(userId));
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
 
     const unsubscribe = onSnapshot(
-      docRef,
+      globalDocRef,
       (snap) => {
         if (snap.exists()) {
           const data = snap.data() as AppSyncData;
+
+          // Cập nhật localStorage cho các dữ liệu quan trọng
+          if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
+            localStorage.setItem('qllh_user_accounts', JSON.stringify(data.accounts));
+            window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: data.accounts } }));
+          }
+
+          if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+            localStorage.setItem('qllh_classes_v52', JSON.stringify(data.classes));
+            localStorage.setItem('qllh_classes', JSON.stringify(data.classes));
+            const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+            localStorage.setItem(`qllh_user_${cleanId}_classes`, JSON.stringify(data.classes));
+          }
+
+          if (data.students && Array.isArray(data.students)) {
+            localStorage.setItem('qllh_students_v52', JSON.stringify(data.students));
+            localStorage.setItem('qllh_students', JSON.stringify(data.students));
+            const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+            localStorage.setItem(`qllh_user_${cleanId}_students`, JSON.stringify(data.students));
+          }
+
+          if (data.currentYear) {
+            localStorage.setItem('qllh_current_year', data.currentYear);
+          }
+
+          // Kích hoạt callback và dispatch event cho các component
           onUpdate(data);
+          window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'cloud_sync', data } }));
         }
       },
       (err) => {

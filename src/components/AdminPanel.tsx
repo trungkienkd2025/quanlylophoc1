@@ -29,7 +29,7 @@ import {
 import { Classroom, Student, StudentPermissions, UserAccount, UserRole } from '../types';
 import { soundManager } from '../utils/audio';
 import confetti from 'canvas-confetti';
-import { initFirebase, saveFirebaseConfig, getStoredFirebaseConfig, pushAllDataToFirestore } from '../firebase';
+import { initFirebase, saveFirebaseConfig, getStoredFirebaseConfig, pushAllDataToFirestore, pushAccountsToFirestore } from '../firebase';
 import { getSavedClasses, getSavedStudents } from '../utils/dbStorage';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
@@ -121,9 +121,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleToggleAccountStatus = (id: string) => {
-    setAccounts((prev) =>
-      prev.map((acc) => (acc.id === id ? { ...acc, status: acc.status === 'active' ? 'locked' : 'active' } : acc))
-    );
+    setAccounts((prev) => {
+      const updated: UserAccount[] = prev.map((acc) =>
+        acc.id === id ? { ...acc, status: acc.status === 'active' ? 'locked' : 'active' } : acc
+      );
+      localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+      pushAccountsToFirestore(updated);
+      return updated;
+    });
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -133,7 +138,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     const target = accounts.find((a) => a.id === id);
     if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản "${target?.fullName || id}" (${target?.username}) không?`)) {
-      setAccounts((prev) => prev.filter((acc) => acc.id !== id));
+      setAccounts((prev) => {
+        const updated = prev.filter((acc) => acc.id !== id);
+        localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+        pushAccountsToFirestore(updated);
+        return updated;
+      });
       soundManager.playTick();
     }
   };
@@ -162,8 +172,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    setAccounts((prev) =>
-      prev.map((acc) => {
+    setAccounts((prev) => {
+      const updated = prev.map((acc) => {
         if (acc.id === editingAccount.id) {
           const avatarIcon = editRole === 'admin' ? '👨‍🏫' : editRole === 'teacher' ? '👩‍🏫' : (acc.avatar || '👦');
           return {
@@ -179,8 +189,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           };
         }
         return acc;
-      })
-    );
+      });
+      localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+      pushAccountsToFirestore(updated);
+      return updated;
+    });
 
     setEditingAccount(null);
     soundManager.playFanfare();
@@ -211,7 +224,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       createdAt: new Date().toISOString().split('T')[0]
     };
 
-    setAccounts((prev) => [created, ...prev]);
+    setAccounts((prev) => {
+      const updated = [created, ...prev];
+      localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+      pushAccountsToFirestore(updated);
+      return updated;
+    });
+
     setShowAddAccountModal(false);
     setNewUsername('');
     setNewFullName('');
@@ -255,7 +274,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setAccounts((prev) => {
       const existingUsernames = new Set(prev.map((a) => a.username));
       const filteredNew = newAccounts.filter((a) => !existingUsernames.has(a.username));
-      return [...filteredNew, ...prev];
+      const updated = [...filteredNew, ...prev];
+      localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+      pushAccountsToFirestore(updated);
+      return updated;
     });
 
     soundManager.playFanfare();
@@ -281,9 +303,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    setAccounts((prev) =>
-      prev.map((a) => (a.role === 'admin' ? { ...a, password: adminNewPassword } : a))
-    );
+    setAccounts((prev) => {
+      const updated = prev.map((a) => (a.role === 'admin' ? { ...a, password: adminNewPassword } : a));
+      localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
+      pushAccountsToFirestore(updated);
+      return updated;
+    });
+
     setPasswordChangeMsg({ text: 'Đổi mật khẩu Quản trị viên thành công!', type: 'success' });
     setAdminOldPassword('');
     setAdminNewPassword('');
