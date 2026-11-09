@@ -25,7 +25,13 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Student, UserAccount } from '../types';
-import { pushAllDataToFirestore } from '../firebase';
+import {
+  pushAllDataToFirestore,
+  deleteClassFromFirestore,
+  deleteStudentFromFirestore,
+  deleteAllStudentsOfClassFromFirestore,
+  deleteYearFromFirestore,
+} from '../firebase';
 import { RandomPickerModal } from './RandomPickerModal';
 import { isClassVisibleForUser, filterClassesForUser, getUserScopeId } from '../utils/userScope';
 import {
@@ -728,6 +734,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       if (onSelectClassExternal) onSelectClassExternal('');
       setCurrentView('list');
     }
+    deleteClassFromFirestore(targetId).catch(() => {});
     window.dispatchEvent(new Event('qllh_data_updated'));
     pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };
@@ -821,6 +828,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         setSelectedEvalStudentId('');
         setEvalStudentSearch('');
       }
+      deleteStudentFromFirestore(stId).catch(() => {});
       window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
     }
@@ -840,6 +848,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       saveStudentsPermanently(updated, currentUser);
       setSelectedEvalStudentId('');
       setEvalStudentSearch('');
+      deleteAllStudentsOfClassFromFirestore(targetClassId).catch(() => {});
       window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
     }
@@ -1333,6 +1342,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     setCurrentClassId('');
     if (onSelectClassExternal) onSelectClassExternal('');
     setCurrentView('list');
+    deleteYearFromFirestore(targetYear).catch(() => {});
     window.dispatchEvent(new Event('qllh_data_updated'));
     pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };

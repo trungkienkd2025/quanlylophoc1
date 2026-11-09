@@ -512,6 +512,44 @@ export default function App() {
     window.dispatchEvent(new Event('qllh_data_updated'));
     window.dispatchEvent(new CustomEvent('qllh_user_switched', { detail: scope }));
 
+    // Tự động kéo CSDL đám mây mới nhất về thiết bị này cho tài khoản vừa đăng nhập
+    fetchAllDataFromFirestore(scope).then((cloudData) => {
+      if (cloudData) {
+        const freshCls = getSavedClasses(user);
+        if (freshCls && freshCls.length > 0) {
+          setClassrooms(
+            freshCls.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              grade: parseInt(c.grade?.toString().replace(/\D/g, '') || '1', 10),
+              academicYear: c.year || '2026-2027',
+              totalStudents: 0,
+              roomCode: 'F08AF1',
+            }))
+          );
+        }
+        const freshStds = getSavedStudents(user);
+        if (freshStds && freshStds.length > 0) {
+          setStudents(
+            freshStds.map((s: any, idx: number) => ({
+              id: s.id,
+              code: s.code || `HS${idx + 1}`,
+              name: s.name,
+              gender: s.gender === 'Nữ' ? 'Nữ' : 'Nam',
+              dob: s.dob || '',
+              avatar: s.gender === 'Nữ' ? '👧' : '👦',
+              classId: s.classId,
+              attendance: s.attendance || 'present',
+              stars: s.stars || 0,
+              speeches: s.speeches || 0,
+              notes: s.note,
+            }))
+          );
+        }
+        window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'login_cloud_sync' } }));
+      }
+    }).catch(() => {});
+
     if (user.role === 'admin' || user.role === 'teacher') {
       setViewMode('teacher');
       soundManager.playFanfare();

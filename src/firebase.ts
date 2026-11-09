@@ -238,28 +238,109 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
     return {};
   };
 
+  let finalAccounts = getStoredAccounts();
+  let finalClasses = getStoredClasses();
+  let finalStudents = getStoredStudents();
+  let finalGrades = getStoredGrades();
+  let finalTimetable = JSON.parse(localStorage.getItem(userTimetableKey) || localStorage.getItem(`qllh_timetable_${cleanId}`) || localStorage.getItem('qllh_timetable_matrix') || '[]');
+  let finalWeeks = JSON.parse(localStorage.getItem(userWeeksKey) || localStorage.getItem('qllh_weeks_v52') || '{}');
+  let finalEvals = JSON.parse(localStorage.getItem(userEvalsKey) || localStorage.getItem('qllh_eval_v52') || '{}');
+  let finalYears = JSON.parse(localStorage.getItem(userYearsKey) || localStorage.getItem('qllh_years') || '["2026-2027", "2025-2026"]');
+  let finalCurrentYear = localStorage.getItem(userCurrentYearKey) || localStorage.getItem('qllh_current_year') || '2026-2027';
+  let finalCommentsT = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t`) || localStorage.getItem('qllh_custom_comments_t') || '[]');
+  let finalCommentsH = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h`) || localStorage.getItem('qllh_custom_comments_h') || '[]');
+
+  // 1. Luôn hợp nhất an toàn với dữ liệu đang có trên Firestore trước khi ghi
+  // NGUYÊN TẮC: Lớp và học sinh đã tạo là LƯU VĨNH VIỄN, không bao giờ bị ghi đè làm mất bởi tài khoản hoặc thiết bị khác
+  const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+  try {
+    const existingSnap = await getDoc(globalDocRef);
+    if (existingSnap.exists()) {
+      const serverData = existingSnap.data() as AppSyncData;
+
+      // Hợp nhất danh sách lớp: giữ tất cả lớp của mọi tài khoản và máy tính khác
+      if (serverData.classes && Array.isArray(serverData.classes)) {
+        const classMap = new Map<string, any>();
+        serverData.classes.forEach((c: any) => {
+          if (c && c.id) classMap.set(c.id, c);
+        });
+        finalClasses.forEach((c: any) => {
+          if (c && c.id) classMap.set(c.id, { ...(classMap.get(c.id) || {}), ...c });
+        });
+        finalClasses = Array.from(classMap.values());
+      }
+
+      // Hợp nhất danh sách học sinh: giữ tất cả học sinh của mọi lớp
+      if (serverData.students && Array.isArray(serverData.students)) {
+        const studentMap = new Map<string, any>();
+        serverData.students.forEach((s: any) => {
+          if (s && s.id) studentMap.set(s.id, s);
+        });
+        finalStudents.forEach((s: any) => {
+          if (s && s.id) studentMap.set(s.id, { ...(studentMap.get(s.id) || {}), ...s });
+        });
+        finalStudents = Array.from(studentMap.values());
+      }
+
+      // Hợp nhất danh sách tài khoản
+      if (serverData.accounts && Array.isArray(serverData.accounts)) {
+        const accMap = new Map<string, any>();
+        serverData.accounts.forEach((a: any) => {
+          if (a && a.id) accMap.set(a.id, a);
+          else if (a && a.username) accMap.set(a.username, a);
+        });
+        finalAccounts.forEach((a: any) => {
+          if (a && a.id) accMap.set(a.id, { ...(accMap.get(a.id) || {}), ...a });
+          else if (a && a.username) accMap.set(a.username, { ...(accMap.get(a.username) || {}), ...a });
+        });
+        finalAccounts = Array.from(accMap.values());
+      }
+
+      // Hợp nhất bảng điểm, tuần, đánh giá
+      if (serverData.grades && typeof serverData.grades === 'object') {
+        finalGrades = { ...serverData.grades, ...finalGrades };
+      }
+      if (serverData.weeks && typeof serverData.weeks === 'object') {
+        finalWeeks = { ...serverData.weeks, ...finalWeeks };
+      }
+      if (serverData.evals && typeof serverData.evals === 'object') {
+        finalEvals = { ...serverData.evals, ...finalEvals };
+      }
+      if (serverData.years && Array.isArray(serverData.years)) {
+        finalYears = Array.from(new Set([...serverData.years, ...finalYears]));
+      }
+      if (serverData.commentsT && Array.isArray(serverData.commentsT)) {
+        finalCommentsT = Array.from(new Set([...serverData.commentsT, ...finalCommentsT]));
+      }
+      if (serverData.commentsH && Array.isArray(serverData.commentsH)) {
+        finalCommentsH = Array.from(new Set([...serverData.commentsH, ...finalCommentsH]));
+      }
+    }
+  } catch (err) {
+    console.warn('Lỗi đọc Firestore trước khi hợp nhất:', err);
+  }
+
   const payload: AppSyncData = {
-    accounts: getStoredAccounts(),
+    accounts: finalAccounts,
     permissions: JSON.parse(localStorage.getItem('qllh_student_permissions') || 'null'),
-    classes: getStoredClasses(),
-    students: getStoredStudents(),
-    grades: getStoredGrades(),
-    timetable: JSON.parse(localStorage.getItem(userTimetableKey) || localStorage.getItem(`qllh_timetable_${cleanId}`) || localStorage.getItem('qllh_timetable_matrix') || '[]'),
-    weeks: JSON.parse(localStorage.getItem(userWeeksKey) || localStorage.getItem('qllh_weeks_v52') || '{}'),
-    evals: JSON.parse(localStorage.getItem(userEvalsKey) || localStorage.getItem('qllh_eval_v52') || '{}'),
-    years: JSON.parse(localStorage.getItem(userYearsKey) || localStorage.getItem('qllh_years') || '["2026-2027", "2025-2026"]'),
-    currentYear: localStorage.getItem(userCurrentYearKey) || localStorage.getItem('qllh_current_year') || '2026-2027',
+    classes: finalClasses,
+    students: finalStudents,
+    grades: finalGrades,
+    timetable: finalTimetable,
+    weeks: finalWeeks,
+    evals: finalEvals,
+    years: finalYears,
+    currentYear: finalCurrentYear,
     submissions: JSON.parse(localStorage.getItem('qllh_quiz_submissions') || '[]'),
     quizBank: JSON.parse(localStorage.getItem('qllh_quiz_bank') || '[]'),
-    commentsT: JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t`) || localStorage.getItem('qllh_custom_comments_t') || '[]'),
-    commentsH: JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h`) || localStorage.getItem('qllh_custom_comments_h') || '[]'),
+    commentsT: finalCommentsT,
+    commentsH: finalCommentsH,
     ownerId: userId,
     updatedAt: new Date().toISOString(),
     lastUpdatedBy: userId,
   };
 
   // 1. Luôn cập nhật vào tài liệu tập trung toàn trường global_data_v1
-  const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
   await setDoc(globalDocRef, payload, { merge: true });
 
   // 2. Đồng thời lưu vào tài liệu riêng của user
@@ -267,6 +348,153 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
   await setDoc(userDocRef, payload, { merge: true });
 
   return true;
+}
+
+/**
+ * Xóa vĩnh viễn một lớp học khỏi hệ thống và đồng bộ ngay lên Firestore
+ */
+export async function deleteClassFromFirestore(classId: string): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) return false;
+  try {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    const snap = await getDoc(globalDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as AppSyncData;
+      const updatedClasses = (data.classes || []).filter((c: any) => c.id !== classId);
+      const updatedStudents = (data.students || []).filter((s: any) => s.classId !== classId);
+      await setDoc(
+        globalDocRef,
+        {
+          classes: updatedClasses,
+          students: updatedStudents,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    }
+  } catch (err) {
+    console.error('Lỗi deleteClassFromFirestore:', err);
+  }
+  return false;
+}
+
+/**
+ * Xóa vĩnh viễn một học sinh khỏi hệ thống và đồng bộ ngay lên Firestore
+ */
+export async function deleteStudentFromFirestore(studentId: string): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) return false;
+  try {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    const snap = await getDoc(globalDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as AppSyncData;
+      const updatedStudents = (data.students || []).filter((s: any) => s.id !== studentId);
+      await setDoc(
+        globalDocRef,
+        {
+          students: updatedStudents,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    }
+  } catch (err) {
+    console.error('Lỗi deleteStudentFromFirestore:', err);
+  }
+  return false;
+}
+
+/**
+ * Xóa vĩnh viễn toàn bộ học sinh của một lớp khỏi Firestore
+ */
+export async function deleteAllStudentsOfClassFromFirestore(classId: string): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) return false;
+  try {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    const snap = await getDoc(globalDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as AppSyncData;
+      const updatedStudents = (data.students || []).filter((s: any) => s.classId !== classId);
+      await setDoc(
+        globalDocRef,
+        {
+          students: updatedStudents,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    }
+  } catch (err) {
+    console.error('Lỗi deleteAllStudentsOfClassFromFirestore:', err);
+  }
+  return false;
+}
+
+/**
+ * Xóa vĩnh viễn một năm học khỏi Firestore
+ */
+export async function deleteYearFromFirestore(year: string): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) return false;
+  try {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    const snap = await getDoc(globalDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as AppSyncData;
+      const updatedYears = (data.years || []).filter((y: string) => y !== year);
+      const updatedClasses = (data.classes || []).filter((c: any) => c.year !== year);
+      const remainingClassIds = new Set(updatedClasses.map((c: any) => c.id));
+      const updatedStudents = (data.students || []).filter((s: any) => remainingClassIds.has(s.classId));
+      await setDoc(
+        globalDocRef,
+        {
+          years: updatedYears,
+          classes: updatedClasses,
+          students: updatedStudents,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    }
+  } catch (err) {
+    console.error('Lỗi deleteYearFromFirestore:', err);
+  }
+  return false;
+}
+
+/**
+ * Xóa vĩnh viễn một tài khoản khỏi Firestore
+ */
+export async function deleteAccountFromFirestore(accountId: string): Promise<boolean> {
+  const db = getFirebaseDb();
+  if (!db) return false;
+  try {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    const snap = await getDoc(globalDocRef);
+    if (snap.exists()) {
+      const data = snap.data() as AppSyncData;
+      const updatedAccounts = (data.accounts || []).filter((a: any) => a.id !== accountId && a.username !== accountId);
+      await setDoc(
+        globalDocRef,
+        {
+          accounts: updatedAccounts,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    }
+  } catch (err) {
+    console.error('Lỗi deleteAccountFromFirestore:', err);
+  }
+  return false;
 }
 
 /**

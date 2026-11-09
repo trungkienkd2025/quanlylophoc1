@@ -29,7 +29,14 @@ import {
 import { Classroom, Student, StudentPermissions, UserAccount, UserRole } from '../types';
 import { soundManager } from '../utils/audio';
 import confetti from 'canvas-confetti';
-import { initFirebase, saveFirebaseConfig, getStoredFirebaseConfig, pushAllDataToFirestore, pushAccountsToFirestore } from '../firebase';
+import {
+  initFirebase,
+  saveFirebaseConfig,
+  getStoredFirebaseConfig,
+  pushAllDataToFirestore,
+  pushAccountsToFirestore,
+  deleteAccountFromFirestore,
+} from '../firebase';
 import { getSavedClasses, getSavedStudents } from '../utils/dbStorage';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
@@ -142,6 +149,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const updated = prev.filter((acc) => acc.id !== id);
         localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
         pushAccountsToFirestore(updated);
+        deleteAccountFromFirestore(id).catch(() => {});
         return updated;
       });
       soundManager.playTick();

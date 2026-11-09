@@ -126,10 +126,24 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
       localStorage.setItem(keys.CLASSES, JSON.stringify(DEFAULT_ADMIN_CLASSES));
       return DEFAULT_ADMIN_CLASSES;
     }
+
+    // Với tài khoản giáo viên: khôi phục từ kho đám mây đã đồng bộ (qllh_classes_v52 / qllh_classes)
+    const sharedClasses = localStorage.getItem(LEGACY_STORAGE_KEYS.CLASSES_V52) || localStorage.getItem(LEGACY_STORAGE_KEYS.CLASSES_CANONICAL);
+    if (sharedClasses) {
+      const parsed = JSON.parse(sharedClasses);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const myClasses = parsed.filter((c: any) => {
+          return c.createdBy === userId || (typeof user === 'object' && user?.username && c.createdBy === user.username);
+        });
+        if (myClasses.length > 0) {
+          localStorage.setItem(keys.CLASSES, JSON.stringify(myClasses));
+          return myClasses;
+        }
+      }
+    }
   } catch (e) {
     console.error('Error reading classes:', e);
   }
-  // Các tài khoản giáo viên khác bắt đầu bằng CSDL riêng trống (0 lớp)
   return [];
 }
 
@@ -144,7 +158,7 @@ export function getSavedStudents(user?: UserAccount | string | null): any[] {
     const userStudentsJson = localStorage.getItem(keys.STUDENTS);
     if (userStudentsJson) {
       const parsed = JSON.parse(userStudentsJson);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
 
     // Tự động chuyển tiếp dữ liệu cũ cho tài khoản Quản trị viên chính
@@ -163,6 +177,23 @@ export function getSavedStudents(user?: UserAccount | string | null): any[] {
         if (Array.isArray(parsed) && parsed.length > 0) {
           localStorage.setItem(keys.STUDENTS, JSON.stringify(parsed));
           return parsed;
+        }
+      }
+    }
+
+    // Khôi phục học sinh từ kho đám mây chung nếu tài khoản vừa đăng nhập thiết bị mới
+    const sharedStudents = localStorage.getItem(LEGACY_STORAGE_KEYS.STUDENTS_V52) || localStorage.getItem(LEGACY_STORAGE_KEYS.STUDENTS_CANONICAL);
+    if (sharedStudents) {
+      const parsed = JSON.parse(sharedStudents);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const userCls = getSavedClasses(user);
+        if (userCls.length > 0) {
+          const userClassIds = new Set(userCls.map((c: any) => c.id));
+          const myStudents = parsed.filter((s: any) => userClassIds.has(s.classId));
+          if (myStudents.length > 0) {
+            localStorage.setItem(keys.STUDENTS, JSON.stringify(myStudents));
+            return myStudents;
+          }
         }
       }
     }
