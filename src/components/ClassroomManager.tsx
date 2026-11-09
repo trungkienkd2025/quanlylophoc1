@@ -273,7 +273,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   // Lắng nghe sự kiện khôi phục dữ liệu để cập nhật tức thì
   useEffect(() => {
-    const handleGlobalSync = () => {
+    const handleGlobalSync = (e: Event) => {
+      // Tránh đọc đè localStorage nếu sự kiện do chính ClassroomManager kích hoạt
+      if ((e as CustomEvent)?.detail?.source === 'ClassroomManager') return;
       const cls = getSavedClasses(currentUser);
       if (cls) setClassesData(cls);
       const std = getSavedStudents(currentUser);
@@ -479,6 +481,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     if (!currentClass) return [];
     return studentsData.filter((s: StudentRecord) => s.classId === currentClass.id);
   }, [studentsData, currentClass]);
+
+  // Tự động khôi phục các học sinh từng bị mất mã lớp (classId rỗng) vào lớp đang hiển thị
+  useEffect(() => {
+    if (!currentClass?.id) return;
+    const orphans = studentsData.filter((s) => !s.classId || s.classId === '');
+    if (orphans.length > 0) {
+      const fixed = studentsData.map((s) =>
+        !s.classId || s.classId === '' ? { ...s, classId: currentClass.id } : s
+      );
+      setStudentsData(fixed);
+      saveStudentsPermanently(fixed, currentUser);
+    }
+  }, [currentClass?.id, studentsData]);
 
   // Danh sách học sinh phục vụ cho RandomPickerModal
   const pickerStudents: Student[] = classStudents.map((s: StudentRecord, idx: number) => ({
@@ -744,27 +759,30 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     }
 
     if (editingStudentId) {
-      setStudentsData((prev) =>
-        prev.map((s) =>
-          s.id === editingStudentId
-            ? {
-                ...s,
-                name: studentFormName.trim(),
-                code: studentFormCode.trim(),
-                dob: studentFormDob,
-                gender: studentFormGender,
-                note: studentFormNote,
-              }
-            : s
-        )
+      const targetClassId = currentClass?.id || currentClassId;
+      const updated = studentsData.map((s) =>
+        s.id === editingStudentId
+          ? {
+              ...s,
+              name: studentFormName.trim(),
+              code: studentFormCode.trim(),
+              dob: studentFormDob,
+              gender: studentFormGender,
+              note: studentFormNote,
+            }
+          : s
       );
+      setStudentsData(updated);
+      saveStudentsPermanently(updated, currentUser);
+      window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       if (selectedEvalStudentId === editingStudentId) {
         setEvalStudentSearch(`${studentFormName.trim()} (${studentFormCode.trim()})`);
       }
     } else {
+      const targetClassId = currentClass?.id || currentClassId;
       const newSt: StudentRecord = {
         id: `s_${Date.now()}`,
-        classId: currentClassId,
+        classId: targetClassId,
         code: studentFormCode.trim(),
         name: studentFormName.trim(),
         dob: studentFormDob,
@@ -775,7 +793,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         speeches: 0,
         orderIndex: classStudents.length + 1,
       };
-      setStudentsData((prev) => [...prev, newSt]);
+      const updated = [...studentsData, newSt];
+      setStudentsData(updated);
+      saveStudentsPermanently(updated, currentUser);
+      window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       if (!selectedEvalStudentId) {
         setSelectedEvalStudentId(newSt.id);
         setEvalStudentSearch(`${newSt.name} (${newSt.code})`);
@@ -786,13 +807,15 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
   // Action: Delete Single Student
   const handleDeleteStudent = (stId: string) => {
-    if (confirm('Thầy có chắc chắn muốn xóa học sinh này khỏi lớp?')) {
-      setStudentsData((prev) => prev.filter((s) => s.id !== stId));
+    if (confirm('Thầy/Cô có chắc chắn muốn xóa học sinh này khỏi lớp?')) {
+      const updated = studentsData.filter((s) => s.id !== stId);
+      setStudentsData(updated);
+      saveStudentsPermanently(updated, currentUser);
       if (selectedEvalStudentId === stId) {
         setSelectedEvalStudentId('');
         setEvalStudentSearch('');
       }
-      window.dispatchEvent(new Event('qllh_data_updated'));
+      window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
     }
   };
@@ -803,11 +826,15 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       alert('Lớp chưa có học sinh nào để xóa!');
       return;
     }
-    if (confirm(`Bạn chắc chắn muốn xóa TOÀN BỘ ${classStudents.length} học sinh của lớp ${currentClass?.name}?`)) {
-      setStudentsData((prev) => prev.filter((s) => s.classId !== currentClassId));
+    const targetClass = currentClass || visibleClassesInCurrentYear.find((c) => c.id === currentClassId);
+    const targetClassId = targetClass?.id || currentClassId;
+    if (confirm(`Bạn chắc chắn muốn xóa TOÀN BỘ ${classStudents.length} học sinh của lớp ${targetClass?.name || ''}?`)) {
+      const updated = studentsData.filter((s) => s.classId !== targetClassId);
+      setStudentsData(updated);
+      saveStudentsPermanently(updated, currentUser);
       setSelectedEvalStudentId('');
       setEvalStudentSearch('');
-      window.dispatchEvent(new Event('qllh_data_updated'));
+      window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
       pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
     }
   };
@@ -815,9 +842,9 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
   // Action: Update Student Field inline
   const handleUpdateStudentInline = (stId: string, field: keyof StudentRecord, val: string) => {
     if (!canManage) return;
-    setStudentsData((prev) =>
-      prev.map((s) => (s.id === stId ? { ...s, [field]: val } : s))
-    );
+    const updated = studentsData.map((s) => (s.id === stId ? { ...s, [field]: val } : s));
+    setStudentsData(updated);
+    saveStudentsPermanently(updated, currentUser);
   };
 
   // Action: Grade change handler
@@ -950,6 +977,19 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     // Reset input so same file can be re-selected if edited
     e.target.value = '';
 
+    // Xác định chính xác lớp học mục tiêu
+    const targetClass =
+      currentClass ||
+      (currentClassId ? visibleClassesInCurrentYear.find((c) => c.id === currentClassId) : null) ||
+      visibleClassesInCurrentYear[0];
+
+    if (!targetClass) {
+      alert('Chưa có lớp học được chọn! Vui lòng tạo lớp học trước khi nhập danh sách học sinh.');
+      return;
+    }
+
+    const targetClassId = targetClass.id;
+
     // Validate size (max 2 MB)
     if (file.size > 2 * 1024 * 1024) {
       alert('File quá lớn! Dung lượng file tối đa là 2 MB.');
@@ -973,8 +1013,27 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           return;
         }
 
-        // Convert worksheet to JSON rows
-        const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+        // Tự động tìm dòng tiêu đề (Header row) - phòng trường hợp file có dòng tiêu đề trường/lớp ở các dòng 1, 2, 3
+        const rawSheetData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, defval: '' });
+        let headerRowIndex = 0;
+        for (let r = 0; r < Math.min(rawSheetData.length, 10); r++) {
+          const rowArr = (rawSheetData[r] || []).map((c: any) => String(c).trim().toLowerCase());
+          const hasName = rowArr.some((c: string) => c.includes('họ') || c.includes('tên') || c.includes('name'));
+          const hasCodeOrStt = rowArr.some(
+            (c: string) => c.includes('mã') || c.includes('stt') || c.includes('code') || c.includes('ngày sinh')
+          );
+          if (hasName || hasCodeOrStt) {
+            headerRowIndex = r;
+            break;
+          }
+        }
+
+        // Convert worksheet to JSON rows từ dòng tiêu đề tìm được
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+          range: headerRowIndex,
+          defval: '',
+        });
+
         if (!rawRows || rawRows.length === 0) {
           alert('File Excel trống, không có dòng dữ liệu học sinh nào!');
           return;
@@ -983,7 +1042,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         // Limit to 200 students as per prompt in image 2
         const rows = rawRows.slice(0, 200);
         const newStudents: StudentRecord[] = [];
-        const existingClassStudents = studentsData.filter((s) => s.classId === currentClassId);
+        const existingClassStudents = studentsData.filter((s) => s.classId === targetClassId);
         let startIdx = existingClassStudents.length + 1;
 
         for (const row of rows) {
@@ -993,52 +1052,146 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
               const lower = k.trim().toLowerCase();
               return keywords.some((kw) => lower.includes(kw));
             });
-            return matchedKey ? String(row[matchedKey]).trim() : '';
+            return matchedKey ? String(row[matchedKey] ?? '').trim() : '';
           };
 
-          const name = findVal(['họ và tên', 'họ tên', 'ho va ten', 'ho ten', 'tên', 'ten', 'name']);
+          // Hỗ trợ cả 2 trường hợp: 1 cột Họ và tên HOẶC tách 2 cột (Họ đệm + Tên)
+          const hoDemKey = keys.find((k) => {
+            const l = k.trim().toLowerCase();
+            return (
+              l.includes('họ đệm') ||
+              l.includes('họ và đệm') ||
+              l.includes('họ và tên đệm') ||
+              l.includes('họ và chữ đệm') ||
+              l.includes('họ lót') ||
+              l === 'họ' ||
+              l === 'ho'
+            );
+          });
+
+          const tenKey = keys.find((k) => {
+            const l = k.trim().toLowerCase();
+            return (
+              l === 'tên' ||
+              l === 'ten' ||
+              l === 'tên hs' ||
+              l === 'tên học sinh' ||
+              l.endsWith(' tên')
+            ) && k !== hoDemKey;
+          });
+
+          let name = '';
+          if (hoDemKey && tenKey && row[hoDemKey] && row[tenKey]) {
+            name = `${String(row[hoDemKey]).trim()} ${String(row[tenKey]).trim()}`.trim();
+          }
+          if (!name) {
+            name = findVal([
+              'họ và tên',
+              'họ và tên học sinh',
+              'họ tên',
+              'ho va ten',
+              'ho ten',
+              'họ và tên hs',
+              'full name',
+              'tên',
+              'ten',
+              'name',
+            ]);
+          }
+
           if (!name) continue; // Bắt buộc phải có họ và tên
 
-          let code = findVal(['mã học sinh', 'mã hs', 'ma hoc sinh', 'ma hs', 'code']);
+          let code = findVal([
+            'mã học sinh',
+            'mã định danh',
+            'mã hs',
+            'ma hoc sinh',
+            'ma dinh danh',
+            'ma hs',
+            'code',
+            'số định danh',
+            'so dinh danh',
+          ]);
           if (!code) {
             code = `HS${startIdx < 10 ? '0' + startIdx : startIdx}`;
             startIdx++;
           }
 
-          let dob = findVal(['ngày sinh', 'ngay sinh', 'dob', 'birth']);
-          // Parse Excel serial date if present
-          if (dob && !isNaN(Number(dob)) && Number(dob) > 1000) {
-            try {
-              const dateObj = XLSX.SSF.parse_date_code(Number(dob));
-              if (dateObj) {
-                const yyyy = dateObj.y;
-                const mm = dateObj.m < 10 ? `0${dateObj.m}` : dateObj.m;
-                const dd = dateObj.d < 10 ? `0${dateObj.d}` : dateObj.d;
-                dob = `${yyyy}-${mm}-${dd}`;
+          // Xử lý ngày sinh đa định dạng (Date object, serial number, dd/mm/yyyy, yyyy-mm-dd)
+          const dobKey = keys.find((k) => {
+            const l = k.trim().toLowerCase();
+            return l.includes('ngày sinh') || l.includes('ngay sinh') || l.includes('dob') || l.includes('birth');
+          });
+
+          let dob = '';
+          if (dobKey && row[dobKey] !== undefined && row[dobKey] !== '') {
+            const rawVal = row[dobKey];
+            if (rawVal instanceof Date) {
+              dob = rawVal.toISOString().split('T')[0];
+            } else if (typeof rawVal === 'number' && rawVal > 1000) {
+              try {
+                const dateObj = XLSX.SSF.parse_date_code(rawVal);
+                if (dateObj) {
+                  const yyyy = dateObj.y;
+                  const mm = String(dateObj.m).padStart(2, '0');
+                  const dd = String(dateObj.d).padStart(2, '0');
+                  dob = `${yyyy}-${mm}-${dd}`;
+                }
+              } catch {}
+            } else {
+              const str = String(rawVal).trim();
+              if (str.includes('/')) {
+                const parts = str.split('/');
+                if (parts.length === 3) {
+                  const d = parts[0].padStart(2, '0');
+                  const m = parts[1].padStart(2, '0');
+                  const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                  dob = `${y}-${m}-${d}`;
+                }
+              } else if (str.includes('-')) {
+                const parts = str.split('-');
+                if (parts.length === 3) {
+                  if (parts[0].length === 4) {
+                    dob = str;
+                  } else {
+                    const d = parts[0].padStart(2, '0');
+                    const m = parts[1].padStart(2, '0');
+                    const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                    dob = `${y}-${m}-${d}`;
+                  }
+                }
+              } else if (/^\d{8}$/.test(str)) {
+                if (parseInt(str.substring(0, 4), 10) > 1900) {
+                  dob = `${str.substring(0, 4)}-${str.substring(4, 6)}-${str.substring(6, 8)}`;
+                } else {
+                  dob = `${str.substring(4, 8)}-${str.substring(2, 4)}-${str.substring(0, 2)}`;
+                }
               }
-            } catch {}
-          } else if (dob && dob.includes('/')) {
-            const parts = dob.split('/');
-            if (parts.length === 3) {
-              const d = parts[0].padStart(2, '0');
-              const m = parts[1].padStart(2, '0');
-              const y = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-              dob = `${y}-${m}-${d}`;
             }
           }
 
-          let gender = findVal(['giới tính', 'gioi tinh', 'gender', 'phái']);
-          if (gender) {
-            const gLower = gender.toLowerCase();
-            if (gLower.includes('nam') || gLower === 'm' || gLower === 'male') gender = 'Nam';
-            else if (gLower.includes('nữ') || gLower.includes('nu') || gLower === 'f' || gLower === 'female') gender = 'Nữ';
+          // Xử lý giới tính (hỗ trợ cả cột chung 'Giới tính' và 2 cột riêng 'Nam' / 'Nữ')
+          let gender = '';
+          const namCol = keys.find((k) => k.trim().toLowerCase() === 'nam');
+          const nuCol = keys.find((k) => k.trim().toLowerCase() === 'nữ' || k.trim().toLowerCase() === 'nu');
+          if (namCol && nuCol) {
+            const vNu = String(row[nuCol] || '').trim().toLowerCase();
+            const vNam = String(row[namCol] || '').trim().toLowerCase();
+            if (vNu === 'x' || vNu === '1' || vNu === 'v') gender = 'Nữ';
+            else if (vNam === 'x' || vNam === '1' || vNam === 'v') gender = 'Nam';
+          }
+          if (!gender) {
+            const gVal = findVal(['giới tính', 'gioi tinh', 'gender', 'phái']).toLowerCase();
+            if (gVal.includes('nam') || gVal === 'm' || gVal === 'male' || gVal === '1') gender = 'Nam';
+            else if (gVal.includes('nữ') || gVal.includes('nu') || gVal === 'f' || gVal === 'female' || gVal === '0')
+              gender = 'Nữ';
           }
 
           const note = findVal(['ghi chú', 'ghi chu', 'note']);
 
           newStudents.push({
-            id: `st_${Date.now()}_${newStudents.length + 1}_${Math.random().toString(36).substr(2, 5)}`,
-            classId: currentClassId,
+            id: `st_${Date.now()}_${newStudents.length + 1}_${Math.random().toString(36).substring(2, 6)}`,
+            classId: targetClassId,
             code,
             name,
             dob,
@@ -1056,12 +1209,42 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
           return;
         }
 
-        setStudentsData((prev) => [...prev, ...newStudents]);
+        // Tự động khôi phục các học sinh từng bị mất mã lớp (classId rỗng) vào lớp này
+        const cleanedExisting = studentsData.map((s) => {
+          if (!s.classId || s.classId === '') {
+            return { ...s, classId: targetClassId };
+          }
+          return s;
+        });
+
+        const updatedStudents = [...cleanedExisting, ...newStudents];
+
+        // 1. Cập nhật state
+        setStudentsData(updatedStudents);
         setStudentSortType('default');
         setGradeSortType('default');
+
+        // 2. Đồng bộ currentClassId nếu cần
+        if (currentClassId !== targetClassId) {
+          setCurrentClassId(targetClassId);
+          if (onSelectClassExternal) onSelectClassExternal(targetClassId);
+        }
+
+        // 3. Tự động chọn học sinh đầu tiên cho phần đánh giá nếu chưa có
+        if (!selectedEvalStudentId && newStudents.length > 0) {
+          setSelectedEvalStudentId(newStudents[0].id);
+          setEvalStudentSearch(`${newStudents[0].name} (${newStudents[0].code})`);
+        }
+
+        // 4. LƯU NGAY LẬP TỨC VÀO LOCALSTORAGE TRƯỚC KHI BẮN EVENT
+        saveStudentsPermanently(updatedStudents, currentUser);
+
+        // 5. Đóng modal và thông báo thành công
         setShowImportExcelModal(false);
-        alert(`✅ Đã nhập thành công ${newStudents.length} học sinh vào lớp ${currentClass?.name || ''}!`);
-        window.dispatchEvent(new Event('qllh_data_updated'));
+        alert(`✅ Đã nhập thành công ${newStudents.length} học sinh vào lớp ${targetClass.name}!`);
+
+        // 6. Phát sự kiện đồng bộ cho toàn bộ ứng dụng
+        window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'ClassroomManager' } }));
         pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
       } catch (err) {
         console.error('Import excel error:', err);
