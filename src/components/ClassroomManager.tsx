@@ -746,9 +746,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       if (onSelectClassExternal) onSelectClassExternal('');
       setCurrentView('list');
     }
-    deleteClassFromFirestore(targetId).catch(() => {});
+    deleteClassFromFirestore(targetId, cls.name, cls.year, getUserScopeId(currentUser)).then(() => {
+      pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
+    }).catch(() => {});
     window.dispatchEvent(new Event('qllh_data_updated'));
-    pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };
 
   // Action: Add / Edit Student Modal

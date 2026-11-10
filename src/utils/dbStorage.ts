@@ -94,10 +94,34 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
   const userId = getUserScopeId(user);
   const keys = getUserStorageKeys(userId);
 
+  let deletedIds = new Set<string>();
+  let deletedKeys = new Set<string>();
+  try {
+    const d = localStorage.getItem('qllh_deleted_class_ids');
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (Array.isArray(parsed)) parsed.forEach((id: string) => id && deletedIds.add(id));
+    }
+    const k = localStorage.getItem('qllh_deleted_class_keys');
+    if (k) {
+      const parsed = JSON.parse(k);
+      if (Array.isArray(parsed)) parsed.forEach((key: string) => key && deletedKeys.add(key.toLowerCase().trim()));
+    }
+  } catch {}
+
+  const isClassDeleted = (c: any) => {
+    if (!c) return true;
+    if (c.id && deletedIds.has(c.id)) return true;
+    const normName = (c.name || '').trim().toLowerCase();
+    const normYear = (c.year || '2026-2027').trim();
+    if (deletedKeys.has(`${normName}__${normYear}`)) return true;
+    return false;
+  };
+
   const deduplicateList = (items: any[]) => {
     if (!Array.isArray(items)) return [];
     const map = new Map<string, any>();
-    items.forEach((c) => {
+    items.filter((c) => !isClassDeleted(c)).forEach((c) => {
       if (!c || !c.name) return;
       const k = (c.name || '').trim().toLowerCase() + '__' + (c.year || '2026-2027').trim();
       if (!map.has(k)) {
@@ -115,8 +139,9 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
     const userClassesJson = localStorage.getItem(keys.CLASSES);
     if (userClassesJson) {
       const parsed = JSON.parse(userClassesJson);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return deduplicateList(parsed);
+      if (Array.isArray(parsed)) {
+        const valid = deduplicateList(parsed);
+        return valid;
       }
     }
 
@@ -149,8 +174,9 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
         }
       }
       // Dữ liệu mẫu ban đầu chuẩn hóa cho admin
-      localStorage.setItem(keys.CLASSES, JSON.stringify(DEFAULT_ADMIN_CLASSES));
-      return DEFAULT_ADMIN_CLASSES;
+      const validDefaults = DEFAULT_ADMIN_CLASSES.filter((c) => !isClassDeleted(c));
+      localStorage.setItem(keys.CLASSES, JSON.stringify(validDefaults));
+      return validDefaults;
     }
 
     // Với tài khoản giáo viên: khôi phục từ kho đám mây đã đồng bộ (qllh_classes_v52 / qllh_classes)

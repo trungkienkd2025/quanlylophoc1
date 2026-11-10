@@ -128,6 +128,9 @@ export interface AppSyncData {
   ownerId?: string;
   updatedAt: string;
   lastUpdatedBy?: string;
+  deletedClassIds?: string[];
+  deletedClassKeys?: string[];
+  deletedStudentIds?: string[];
 }
 
 export function getUserDataDocId(userScope?: string): string {
@@ -163,16 +166,23 @@ export async function pushAccountsToFirestore(accounts: any[]): Promise<boolean>
 
 /**
  * Hợp nhất an toàn danh sách lớp giữa server và local:
- * - Giữ lại TẤT CẢ các lớp người dùng vừa tạo cục bộ (không bao giờ xóa mất khi F5)
- * - Tôn trọng danh sách ID đã bị người dùng chủ động bấm xóa (qllh_deleted_class_ids)
- * - KHỬ TRÙNG LẶP TUYỆT ĐỐI theo Tên lớp và Năm học (ví dụ: không bao giờ có 2 lớp cùng tên '1/2' trong năm '2026-2027')
+ * - Đồng bộ lệnh xóa từ bất kỳ thiết bị nào qua danh sách deletedClassIds và deletedClassKeys
+ * - Tuyệt đối không hồi sinh các lớp mà người dùng đã xóa trên máy khác
+ * - KHỬ TRÙNG LẶP TUYỆT ĐỐI theo Tên lớp và Năm học
  */
-export function mergeClassesSafely(serverClasses: any[], userScope?: string): any[] {
+export function mergeClassesSafely(
+  serverClasses: any[],
+  userScope?: string,
+  serverDeletedIds?: string[],
+  serverDeletedKeys?: string[]
+): any[] {
   const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const userClassesKey = `qllh_user_${cleanId}_classes`;
+
   let localClasses: any[] = [];
   try {
     const raw =
-      localStorage.getItem(`qllh_user_${cleanId}_classes`) ||
+      localStorage.getItem(userClassesKey) ||
       localStorage.getItem('qllh_classes_v52') ||
       localStorage.getItem('qllh_classes');
     if (raw) {
@@ -181,20 +191,53 @@ export function mergeClassesSafely(serverClasses: any[], userScope?: string): an
     }
   } catch {}
 
+  // 1. Tổng hợp danh sách đã xóa từ cả local lẫn server
   let deletedIds = new Set<string>();
+  let deletedKeys = new Set<string>();
   try {
     const d = localStorage.getItem('qllh_deleted_class_ids');
-    if (d) deletedIds = new Set(JSON.parse(d));
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (Array.isArray(parsed)) parsed.forEach((id: string) => id && deletedIds.add(id));
+    }
+    const k = localStorage.getItem('qllh_deleted_class_keys');
+    if (k) {
+      const parsed = JSON.parse(k);
+      if (Array.isArray(parsed)) parsed.forEach((key: string) => key && deletedKeys.add(key.toLowerCase().trim()));
+    }
   } catch {}
 
-  // 1. Lọc bỏ các lớp đã bị chủ động xóa
-  const validServer = (serverClasses || []).filter((c) => c && c.id && !deletedIds.has(c.id));
-  const validLocal = (localClasses || []).filter((c) => c && c.id && !deletedIds.has(c.id));
+  if (Array.isArray(serverDeletedIds)) {
+    serverDeletedIds.forEach((id) => id && deletedIds.add(id));
+  }
+  if (Array.isArray(serverDeletedKeys)) {
+    serverDeletedKeys.forEach((key) => key && deletedKeys.add(key.toLowerCase().trim()));
+  }
 
-  // 2. Khử trùng lặp đa tầng: theo Logic Key (Tên lớp chuẩn hóa + Năm học)
+  // Lưu lại vào localStorage của máy hiện tại để không bao giờ khôi phục nhầm
+  try {
+    localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(Array.from(deletedIds)));
+    localStorage.setItem('qllh_deleted_class_keys', JSON.stringify(Array.from(deletedKeys)));
+  } catch {}
+
+  const isClassDeleted = (c: any) => {
+    if (!c) return true;
+    if (c.id && deletedIds.has(c.id)) return true;
+    const normName = (c.name || '').trim().toLowerCase();
+    const normYear = (c.year || '2026-2027').trim();
+    const logicKey = `${normName}__${normYear}`;
+    if (deletedKeys.has(logicKey)) return true;
+    return false;
+  };
+
+  // 2. Lọc bỏ các lớp đã bị chủ động xóa trên bất kỳ máy nào
+  const validServer = (serverClasses || []).filter((c) => c && c.id && !isClassDeleted(c));
+  const validLocal = (localClasses || []).filter((c) => c && c.id && !isClassDeleted(c));
+
+  // 3. Khử trùng lặp đa tầng: theo Logic Key (Tên lớp chuẩn hóa + Năm học)
   const map = new Map<string, any>();
 
-  // Ưu tiên nạp từ server trước
+  // Nạp từ server trước (server là cơ sở dữ liệu gốc)
   validServer.forEach((c) => {
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
@@ -202,17 +245,20 @@ export function mergeClassesSafely(serverClasses: any[], userScope?: string): an
     map.set(logicKey, c);
   });
 
-  // Hợp nhất từ local: nếu local có lớp mới mà server chưa có (như 3/3), thêm vào
+  // Hợp nhất từ local: chỉ thêm lớp nếu lớp chưa bị xóa
   validLocal.forEach((c) => {
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
     const logicKey = `${normName}__${normYear}`;
 
+    if (deletedKeys.has(logicKey) || (c.id && deletedIds.has(c.id))) {
+      return;
+    }
+
     if (!map.has(logicKey)) {
       map.set(logicKey, c);
     } else {
       const existing = map.get(logicKey);
-      // Nếu existing là id mẫu cũ (c_1_2) còn c là id thực tế (c_17...) thì ưu tiên id thực tế
       const preferredId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17'))
         ? c.id
         : existing.id;
@@ -225,13 +271,26 @@ export function mergeClassesSafely(serverClasses: any[], userScope?: string): an
     }
   });
 
-  return Array.from(map.values());
+  const merged = Array.from(map.values());
+
+  // Cập nhật ngay vào localStorage của máy hiện tại
+  try {
+    localStorage.setItem(userClassesKey, JSON.stringify(merged));
+    localStorage.setItem('qllh_classes_v52', JSON.stringify(merged));
+    localStorage.setItem('qllh_classes', JSON.stringify(merged));
+  } catch {}
+
+  return merged;
 }
 
 /**
  * Hợp nhất an toàn danh sách học sinh giữa server và local
  */
-export function mergeStudentsSafely(serverStudents: any[], userScope?: string): any[] {
+export function mergeStudentsSafely(
+  serverStudents: any[],
+  userScope?: string,
+  serverDeletedIds?: string[]
+): any[] {
   const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
   let localStudents: any[] = [];
   try {
@@ -248,13 +307,34 @@ export function mergeStudentsSafely(serverStudents: any[], userScope?: string): 
   let deletedIds = new Set<string>();
   try {
     const d = localStorage.getItem('qllh_deleted_student_ids');
-    if (d) deletedIds = new Set(JSON.parse(d));
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (Array.isArray(parsed)) parsed.forEach((id: string) => id && deletedIds.add(id));
+    }
+  } catch {}
+
+  if (Array.isArray(serverDeletedIds)) {
+    serverDeletedIds.forEach((id) => id && deletedIds.add(id));
+  }
+
+  try {
+    localStorage.setItem('qllh_deleted_student_ids', JSON.stringify(Array.from(deletedIds)));
+  } catch {}
+
+  // Lấy danh sách lớp đã xóa để loại bỏ học sinh thuộc lớp đó
+  let deletedClassIds = new Set<string>();
+  try {
+    const dc = localStorage.getItem('qllh_deleted_class_ids');
+    if (dc) {
+      const parsed = JSON.parse(dc);
+      if (Array.isArray(parsed)) parsed.forEach((id: string) => id && deletedClassIds.add(id));
+    }
   } catch {}
 
   const combined = [
     ...(serverStudents || []),
     ...(localStudents || []),
-  ].filter((s) => s && s.id && !deletedIds.has(s.id));
+  ].filter((s) => s && s.id && !deletedIds.has(s.id) && !deletedClassIds.has(s.classId));
 
   const map = new Map<string, any>();
   combined.forEach((s) => {
@@ -270,7 +350,13 @@ export function mergeStudentsSafely(serverStudents: any[], userScope?: string): 
     }
   });
 
-  return Array.from(map.values());
+  const merged = Array.from(map.values());
+  try {
+    localStorage.setItem(`qllh_user_${cleanId}_students`, JSON.stringify(merged));
+    localStorage.setItem('qllh_students_v52', JSON.stringify(merged));
+  } catch {}
+
+  return merged;
 }
 
 /**
@@ -429,8 +515,8 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
       if (existingSnap && existingSnap.exists()) {
         const serverData = existingSnap.data() as AppSyncData;
 
-        finalClasses = mergeClassesSafely(serverData.classes || [], userId);
-        finalStudents = mergeStudentsSafely(serverData.students || [], userId);
+        finalClasses = mergeClassesSafely(serverData.classes || [], userId, serverData.deletedClassIds, serverData.deletedClassKeys);
+        finalStudents = mergeStudentsSafely(serverData.students || [], userId, serverData.deletedStudentIds);
         finalAccounts = mergeAccountsSafely(serverData.accounts || []);
 
         if (serverData.grades && typeof serverData.grades === 'object') {
@@ -475,6 +561,9 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
     ownerId: userId,
     updatedAt: new Date().toISOString(),
     lastUpdatedBy: userId,
+    deletedClassIds: JSON.parse(localStorage.getItem('qllh_deleted_class_ids') || '[]'),
+    deletedClassKeys: JSON.parse(localStorage.getItem('qllh_deleted_class_keys') || '[]'),
+    deletedStudentIds: JSON.parse(localStorage.getItem('qllh_deleted_student_ids') || '[]'),
   };
 
   if (!db) {
@@ -499,34 +588,118 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
 /**
  * Xóa vĩnh viễn một lớp học khỏi hệ thống và đồng bộ ngay lên Firestore
  */
-export async function deleteClassFromFirestore(classId: string): Promise<boolean> {
-  // Ghi nhận ngay vào danh sách đã xóa để merge không bao giờ khôi phục lại
+/**
+ * Xóa vĩnh viễn một lớp học khỏi hệ thống và đồng bộ ngay lên Firestore
+ * - Hỗ trợ truyền tên lớp và năm học để tạo khóa logicKey (ví dụ: '1/2__2026-2027')
+ * - Đồng bộ lệnh xóa sang tất cả máy tính và thiết bị khác qua deletedClassIds và deletedClassKeys
+ */
+export async function deleteClassFromFirestore(
+  classId: string,
+  className?: string,
+  classYear?: string,
+  userScope?: string
+): Promise<boolean> {
+  const cleanId = (userScope || 'u_admin').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const normName = (className || '').trim().toLowerCase();
+  const normYear = (classYear || '2026-2027').trim();
+  const logicKey = normName ? `${normName}__${normYear}` : '';
+
+  // 1. Ghi nhận ngay vào danh sách đã xóa trên local storage
+  let currentDeletedIds: string[] = [];
+  let currentDeletedKeys: string[] = [];
   try {
-    const d: string[] = JSON.parse(localStorage.getItem('qllh_deleted_class_ids') || '[]');
-    if (!d.includes(classId)) {
-      d.push(classId);
-      localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(d));
+    currentDeletedIds = JSON.parse(localStorage.getItem('qllh_deleted_class_ids') || '[]');
+    if (classId && !currentDeletedIds.includes(classId)) {
+      currentDeletedIds.push(classId);
     }
+    localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(currentDeletedIds));
+
+    currentDeletedKeys = JSON.parse(localStorage.getItem('qllh_deleted_class_keys') || '[]');
+    if (logicKey && !currentDeletedKeys.includes(logicKey)) {
+      currentDeletedKeys.push(logicKey);
+    }
+    localStorage.setItem('qllh_deleted_class_keys', JSON.stringify(currentDeletedKeys));
   } catch {}
 
+  // 2. Xóa triệt để khỏi TẤT CẢ các khóa local storage trên máy tính này
+  const purgeClassesFromLocal = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        const filtered = list.filter((c: any) => {
+          if (!c) return false;
+          if (c.id === classId) return false;
+          if (logicKey) {
+            const k = (c.name || '').trim().toLowerCase() + '__' + (c.year || '2026-2027').trim();
+            if (k === logicKey) return false;
+          }
+          return true;
+        });
+        localStorage.setItem(key, JSON.stringify(filtered));
+      }
+    } catch {}
+  };
+
+  purgeClassesFromLocal(`qllh_user_${cleanId}_classes`);
+  purgeClassesFromLocal('qllh_classes_v52');
+  purgeClassesFromLocal('qllh_classes');
+  purgeClassesFromLocal('qllh_classes_v50');
+  purgeClassesFromLocal('qllh_user_u_admin_classes');
+
+  // Xóa học sinh của lớp khỏi local
+  const purgeStudentsFromLocal = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        const filtered = list.filter((s: any) => s && s.classId !== classId);
+        localStorage.setItem(key, JSON.stringify(filtered));
+      }
+    } catch {}
+  };
+  purgeStudentsFromLocal(`qllh_user_${cleanId}_students`);
+  purgeStudentsFromLocal('qllh_students_v52');
+  purgeStudentsFromLocal('qllh_students');
+
+  // 3. Cập nhật ngay lên Firestore
   const db = getFirebaseDb();
   if (!db) return false;
   try {
     const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-    const snap = await getDoc(globalDocRef);
-    if (snap.exists()) {
+    const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(cleanId));
+
+    const snap: any = await withTimeout(getDoc(globalDocRef), 800, null);
+    if (snap && snap.exists()) {
       const data = snap.data() as AppSyncData;
-      const updatedClasses = (data.classes || []).filter((c: any) => c.id !== classId);
-      const updatedStudents = (data.students || []).filter((s: any) => s.classId !== classId);
-      await setDoc(
-        globalDocRef,
-        {
-          classes: updatedClasses,
-          students: updatedStudents,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      const updatedClasses = (data.classes || []).filter((c: any) => {
+        if (!c) return false;
+        if (c.id === classId) return false;
+        if (logicKey) {
+          const k = (c.name || '').trim().toLowerCase() + '__' + (c.year || '2026-2027').trim();
+          if (k === logicKey) return false;
+        }
+        return true;
+      });
+      const updatedStudents = (data.students || []).filter((s: any) => s && s.classId !== classId);
+
+      const mergedDeletedIds = Array.from(new Set([...(data.deletedClassIds || []), ...currentDeletedIds, classId]));
+      const mergedDeletedKeys = Array.from(new Set([...(data.deletedClassKeys || []), ...currentDeletedKeys, ...(logicKey ? [logicKey] : [])]));
+
+      const payload = {
+        classes: updatedClasses,
+        students: updatedStudents,
+        deletedClassIds: mergedDeletedIds,
+        deletedClassKeys: mergedDeletedKeys,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await Promise.allSettled([
+        setDoc(globalDocRef, payload, { merge: true }),
+        setDoc(userDocRef, payload, { merge: true }),
+      ]);
       return true;
     }
   } catch (err) {
@@ -539,11 +712,12 @@ export async function deleteClassFromFirestore(classId: string): Promise<boolean
  * Xóa vĩnh viễn một học sinh khỏi hệ thống và đồng bộ ngay lên Firestore
  */
 export async function deleteStudentFromFirestore(studentId: string): Promise<boolean> {
+  let currentDeletedStudentIds: string[] = [];
   try {
-    const d: string[] = JSON.parse(localStorage.getItem('qllh_deleted_student_ids') || '[]');
-    if (!d.includes(studentId)) {
-      d.push(studentId);
-      localStorage.setItem('qllh_deleted_student_ids', JSON.stringify(d));
+    currentDeletedStudentIds = JSON.parse(localStorage.getItem('qllh_deleted_student_ids') || '[]');
+    if (!currentDeletedStudentIds.includes(studentId)) {
+      currentDeletedStudentIds.push(studentId);
+      localStorage.setItem('qllh_deleted_student_ids', JSON.stringify(currentDeletedStudentIds));
     }
   } catch {}
 
@@ -551,14 +725,16 @@ export async function deleteStudentFromFirestore(studentId: string): Promise<boo
   if (!db) return false;
   try {
     const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-    const snap = await getDoc(globalDocRef);
-    if (snap.exists()) {
+    const snap: any = await withTimeout(getDoc(globalDocRef), 800, null);
+    if (snap && snap.exists()) {
       const data = snap.data() as AppSyncData;
       const updatedStudents = (data.students || []).filter((s: any) => s.id !== studentId);
+      const mergedDeletedStudentIds = Array.from(new Set([...(data.deletedStudentIds || []), ...currentDeletedStudentIds, studentId]));
       await setDoc(
         globalDocRef,
         {
           students: updatedStudents,
+          deletedStudentIds: mergedDeletedStudentIds,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
@@ -715,7 +891,7 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
 
       // 3. Đồng bộ danh sách lớp học (Hợp nhất an toàn, không bao giờ mất lớp khi F5)
       if (data.classes && Array.isArray(data.classes)) {
-        const mergedClasses = mergeClassesSafely(data.classes, userId);
+        const mergedClasses = mergeClassesSafely(data.classes, userId, data.deletedClassIds, data.deletedClassKeys);
         localStorage.setItem(userClassesKey, JSON.stringify(mergedClasses));
         localStorage.setItem('qllh_classes_v52', JSON.stringify(mergedClasses));
         localStorage.setItem('qllh_classes', JSON.stringify(mergedClasses));
@@ -726,7 +902,7 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
 
       // 4. Đồng bộ danh sách học sinh (Hợp nhất an toàn)
       if (data.students && Array.isArray(data.students)) {
-        const mergedStudents = mergeStudentsSafely(data.students, userId);
+        const mergedStudents = mergeStudentsSafely(data.students, userId, data.deletedStudentIds);
         localStorage.setItem(userStudentsKey, JSON.stringify(mergedStudents));
         localStorage.setItem('qllh_students_v52', JSON.stringify(mergedStudents));
         localStorage.setItem('qllh_students', JSON.stringify(mergedStudents));
@@ -845,7 +1021,7 @@ export function subscribeToFirestoreData(
           // Hợp nhất lớp học an toàn (KHÔNG BAO GIỜ XÓA MẤT LỚP MỚI TẠO CỦA USER KHI F5 HOẶC SNAPSHOT)
           let finalClasses = rawData.classes || [];
           if (Array.isArray(rawData.classes)) {
-            finalClasses = mergeClassesSafely(rawData.classes, userScope);
+            finalClasses = mergeClassesSafely(rawData.classes, userScope, rawData.deletedClassIds, rawData.deletedClassKeys);
             localStorage.setItem('qllh_classes_v52', JSON.stringify(finalClasses));
             localStorage.setItem('qllh_classes', JSON.stringify(finalClasses));
             localStorage.setItem(`qllh_user_${cleanId}_classes`, JSON.stringify(finalClasses));
@@ -855,7 +1031,7 @@ export function subscribeToFirestoreData(
           // Hợp nhất học sinh an toàn
           let finalStudents = rawData.students || [];
           if (Array.isArray(rawData.students)) {
-            finalStudents = mergeStudentsSafely(rawData.students, userScope);
+            finalStudents = mergeStudentsSafely(rawData.students, userScope, rawData.deletedStudentIds);
             localStorage.setItem('qllh_students_v52', JSON.stringify(finalStudents));
             localStorage.setItem('qllh_students', JSON.stringify(finalStudents));
             localStorage.setItem(`qllh_user_${cleanId}_students`, JSON.stringify(finalStudents));

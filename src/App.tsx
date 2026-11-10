@@ -278,16 +278,18 @@ export default function App() {
   // Hành động chủ động bấm đồng bộ đám mây bằng tay (Manual Sync)
   const handleManualSyncCloud = async () => {
     setIsSyncingCloud(true);
-    // Giới hạn thời gian xoay tối đa 1.2s đảm bảo nút không bao giờ xoay lâu làm đơ giao diện
+    // Giới hạn thời gian xoay tối đa 1.5s đảm bảo nút không bao giờ xoay lâu làm đơ giao diện
     const safetyTimer = setTimeout(() => {
       setIsSyncingCloud(false);
-    }, 1200);
+    }, 1500);
 
     try {
       const scope = getUserScopeId(currentUser);
-      const res = await pushAllDataToFirestoreEx(scope, accounts);
+      // 1. Tải dữ liệu mới nhất từ Firestore trước để nhận lệnh xóa/sửa từ máy khác
+      const cloudData = await fetchAllDataFromFirestore(scope);
+      const data = cloudData || (await pushAllDataToFirestoreEx(scope, accounts)).data;
       clearTimeout(safetyTimer);
-      const data = res.data;
+
       if (data) {
         if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
           setAccounts(data.accounts);
@@ -298,7 +300,7 @@ export default function App() {
         if (data.currentYear) {
           setSelectedYear(data.currentYear);
         }
-        if (data.classes && Array.isArray(data.classes) && data.classes.length > 0) {
+        if (data.classes && Array.isArray(data.classes)) {
           setClassrooms(
             data.classes.map((c: any) => ({
               id: c.id,
@@ -327,11 +329,11 @@ export default function App() {
             }))
           );
         }
-        window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'manual_sync' } }));
+        window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'manual_sync', data } }));
       }
       setSyncToast({
         show: true,
-        message: 'Đã đồng bộ thành công CSDL từ đám mây Firestore! Dữ liệu đã thống nhất tức thì.',
+        message: 'Đã đồng bộ thành công CSDL từ đám mây Firestore! Mọi thay đổi và lớp học đã được cập nhật thống nhất.',
         type: 'success',
       });
       setTimeout(() => setSyncToast({ show: false, message: '', type: 'success' }), 3000);
