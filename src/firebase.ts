@@ -218,43 +218,36 @@ export function mergeClassesSafely(
     serverDeletedKeys.forEach((key) => key && deletedKeys.add(key.toLowerCase().trim()));
   }
 
-  // 1. NẠP TOÀN BỘ LỚP TỪ SERVER (Server là nguồn cơ sở dữ liệu gốc)
+  const isClassDeleted = (c: any) => {
+    if (!c || !c.name) return true;
+    if (c.id && deletedIds.has(c.id)) return true;
+    const normName = (c.name || '').trim().toLowerCase();
+    const normYear = (c.year || '2026-2027').trim();
+    const logicKey = `${normName}__${normYear}`;
+    if (deletedKeys.has(logicKey)) return true;
+    return false;
+  };
+
   const map = new Map<string, any>();
+
+  // 1. NẠP TOÀN BỘ LỚP TỪ SERVER (loại trừ tuyệt đối các lớp đã bị xóa)
   (serverClasses || []).forEach((c) => {
-    if (!c || !c.name) return;
+    if (isClassDeleted(c)) return;
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
     const logicKey = `${normName}__${normYear}`;
     map.set(logicKey, c);
-
-    // Vì lớp này đang có mặt trên Server, giải phóng mọi cờ xóa cũ đối với lớp này!
-    deletedKeys.delete(logicKey);
-    if (c.id) deletedIds.delete(c.id);
   });
 
-  // 2. HỢP NHẤT TỪ LOCAL:
-  // Nếu máy này có lớp (ví dụ Máy 1 có 25 lớp), giữ lại và bổ sung
-  const isServerTombstone = (logicKey: string, id?: string) => {
-    if (Array.isArray(serverDeletedKeys) && serverDeletedKeys.includes(logicKey)) return true;
-    if (id && Array.isArray(serverDeletedIds) && serverDeletedIds.includes(id)) return true;
-    return false;
-  };
-
+  // 2. HỢP NHẤT TỪ LOCAL (loại trừ tuyệt đối các lớp đã bị xóa)
   localClasses.forEach((c) => {
-    if (!c || !c.name) return;
+    if (isClassDeleted(c)) return;
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
     const logicKey = `${normName}__${normYear}`;
 
-    // Nếu lớp này bị đánh dấu xóa trên Server và server không có, bỏ qua
-    if (isServerTombstone(logicKey, c.id)) {
-      return;
-    }
-
     if (!map.has(logicKey)) {
       map.set(logicKey, c);
-      deletedKeys.delete(logicKey);
-      if (c.id) deletedIds.delete(c.id);
     } else {
       const existing = map.get(logicKey);
       const preferredId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17'))
@@ -652,6 +645,7 @@ export async function deleteClassFromFirestore(
   purgeClassesFromLocal('qllh_classes');
   purgeClassesFromLocal('qllh_classes_v50');
   purgeClassesFromLocal('qllh_user_u_admin_classes');
+  purgeClassesFromLocal('qllh_user_trungkienkd2025_classes');
 
   // Xóa học sinh của lớp khỏi local
   const purgeStudentsFromLocal = (key: string) => {
@@ -668,18 +662,27 @@ export async function deleteClassFromFirestore(
   purgeStudentsFromLocal(`qllh_user_${cleanId}_students`);
   purgeStudentsFromLocal('qllh_students_v52');
   purgeStudentsFromLocal('qllh_students');
+  purgeStudentsFromLocal('qllh_students_v50');
+  purgeStudentsFromLocal('qllh_user_u_admin_students');
+  purgeStudentsFromLocal('qllh_user_trungkienkd2025_students');
 
   // 3. Cập nhật ngay lên Firestore
   const db = getFirebaseDb();
-  if (!db) return false;
+  if (!db) return true;
   try {
     const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
     const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(cleanId));
 
-    const snap: any = await withTimeout(getDoc(globalDocRef), 800, null);
+    const snap: any = await withTimeout(getDoc(globalDocRef), 1800, null);
+    const mergedDeletedIds = Array.from(new Set([...currentDeletedIds, classId]));
+    const mergedDeletedKeys = Array.from(new Set([...currentDeletedKeys, ...(logicKey ? [logicKey] : [])]));
+
+    let updatedClasses: any[] | undefined = undefined;
+    let updatedStudents: any[] | undefined = undefined;
+
     if (snap && snap.exists()) {
       const data = snap.data() as AppSyncData;
-      const updatedClasses = (data.classes || []).filter((c: any) => {
+      updatedClasses = (data.classes || []).filter((c: any) => {
         if (!c) return false;
         if (c.id === classId) return false;
         if (logicKey) {
@@ -688,29 +691,28 @@ export async function deleteClassFromFirestore(
         }
         return true;
       });
-      const updatedStudents = (data.students || []).filter((s: any) => s && s.classId !== classId);
-
-      const mergedDeletedIds = Array.from(new Set([...(data.deletedClassIds || []), ...currentDeletedIds, classId]));
-      const mergedDeletedKeys = Array.from(new Set([...(data.deletedClassKeys || []), ...currentDeletedKeys, ...(logicKey ? [logicKey] : [])]));
-
-      const payload = {
-        classes: updatedClasses,
-        students: updatedStudents,
-        deletedClassIds: mergedDeletedIds,
-        deletedClassKeys: mergedDeletedKeys,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await Promise.allSettled([
-        setDoc(globalDocRef, payload, { merge: true }),
-        setDoc(userDocRef, payload, { merge: true }),
-      ]);
-      return true;
+      updatedStudents = (data.students || []).filter((s: any) => s && s.classId !== classId);
+      (data.deletedClassIds || []).forEach((id) => id && mergedDeletedIds.push(id));
+      (data.deletedClassKeys || []).forEach((k) => k && mergedDeletedKeys.push(k));
     }
+
+    const payload: any = {
+      deletedClassIds: Array.from(new Set(mergedDeletedIds)),
+      deletedClassKeys: Array.from(new Set(mergedDeletedKeys)),
+      updatedAt: new Date().toISOString(),
+    };
+    if (updatedClasses !== undefined) payload.classes = updatedClasses;
+    if (updatedStudents !== undefined) payload.students = updatedStudents;
+
+    await Promise.allSettled([
+      setDoc(globalDocRef, payload, { merge: true }),
+      setDoc(userDocRef, payload, { merge: true }),
+    ]);
+    return true;
   } catch (err) {
     console.error('Lỗi deleteClassFromFirestore:', err);
   }
-  return false;
+  return true;
 }
 
 /**
@@ -727,29 +729,31 @@ export async function deleteStudentFromFirestore(studentId: string): Promise<boo
   } catch {}
 
   const db = getFirebaseDb();
-  if (!db) return false;
+  if (!db) return true;
   try {
     const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-    const snap: any = await withTimeout(getDoc(globalDocRef), 800, null);
+    const snap: any = await withTimeout(getDoc(globalDocRef), 1800, null);
+    const mergedDeletedStudentIds = Array.from(new Set([...currentDeletedStudentIds, studentId]));
+    let updatedStudents: any[] | undefined = undefined;
+
     if (snap && snap.exists()) {
       const data = snap.data() as AppSyncData;
-      const updatedStudents = (data.students || []).filter((s: any) => s.id !== studentId);
-      const mergedDeletedStudentIds = Array.from(new Set([...(data.deletedStudentIds || []), ...currentDeletedStudentIds, studentId]));
-      await setDoc(
-        globalDocRef,
-        {
-          students: updatedStudents,
-          deletedStudentIds: mergedDeletedStudentIds,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-      return true;
+      updatedStudents = (data.students || []).filter((s: any) => s.id !== studentId);
+      (data.deletedStudentIds || []).forEach((id) => id && mergedDeletedStudentIds.push(id));
     }
+
+    const payload: any = {
+      deletedStudentIds: Array.from(new Set(mergedDeletedStudentIds)),
+      updatedAt: new Date().toISOString(),
+    };
+    if (updatedStudents !== undefined) payload.students = updatedStudents;
+
+    await setDoc(globalDocRef, payload, { merge: true });
+    return true;
   } catch (err) {
     console.error('Lỗi deleteStudentFromFirestore:', err);
   }
-  return false;
+  return true;
 }
 
 /**

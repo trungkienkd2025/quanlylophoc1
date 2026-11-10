@@ -157,10 +157,10 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
 
   try {
     const userClassesJson = localStorage.getItem(keys.CLASSES);
-    if (userClassesJson) {
+    if (userClassesJson !== null) {
       const parsed = JSON.parse(userClassesJson);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const valid = deduplicateList(parsed);
+      if (Array.isArray(parsed)) {
+        const valid = deduplicateList(parsed).filter((c) => !isClassDeleted(c));
         return valid;
       }
     }
@@ -171,11 +171,13 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
       if (v52) {
         const parsed = JSON.parse(v52);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const tagged = deduplicateList(parsed).map((c: any) => ({
-            ...c,
-            createdBy: c.createdBy || 'u_admin',
-            createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
-          }));
+          const tagged = deduplicateList(parsed)
+            .filter((c) => !isClassDeleted(c))
+            .map((c: any) => ({
+              ...c,
+              createdBy: c.createdBy || 'u_admin',
+              createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
+            }));
           localStorage.setItem(keys.CLASSES, JSON.stringify(tagged));
           return tagged;
         }
@@ -184,11 +186,13 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
       if (canonical) {
         const parsed = JSON.parse(canonical);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const tagged = deduplicateList(parsed).map((c: any) => ({
-            ...c,
-            createdBy: c.createdBy || 'u_admin',
-            createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
-          }));
+          const tagged = deduplicateList(parsed)
+            .filter((c) => !isClassDeleted(c))
+            .map((c: any) => ({
+              ...c,
+              createdBy: c.createdBy || 'u_admin',
+              createdByName: c.createdByName || 'Thầy Trần Trung Kiên',
+            }));
           localStorage.setItem(keys.CLASSES, JSON.stringify(tagged));
           return tagged;
         }
@@ -204,9 +208,11 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
     if (sharedClasses) {
       const parsed = JSON.parse(sharedClasses);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const myClasses = deduplicateList(parsed).filter((c: any) => {
-          return c.createdBy === userId || (typeof user === 'object' && user?.username && c.createdBy === user.username);
-        });
+        const myClasses = deduplicateList(parsed)
+          .filter((c) => !isClassDeleted(c))
+          .filter((c: any) => {
+            return c.createdBy === userId || (typeof user === 'object' && user?.username && c.createdBy === user.username);
+          });
         if (myClasses.length > 0) {
           localStorage.setItem(keys.CLASSES, JSON.stringify(myClasses));
           return myClasses;
@@ -217,6 +223,32 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
     console.error('Error reading classes:', e);
   }
   return [];
+}
+
+/**
+ * Xóa một lớp khỏi danh sách đã xóa khi người dùng chủ động tạo lại lớp đó
+ */
+export function unmarkClassAsDeleted(classId?: string, logicKey?: string) {
+  try {
+    if (classId) {
+      const rawIds = localStorage.getItem('qllh_deleted_class_ids');
+      if (rawIds) {
+        const ids = JSON.parse(rawIds);
+        if (Array.isArray(ids)) {
+          localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(ids.filter((id) => id !== classId)));
+        }
+      }
+    }
+    if (logicKey) {
+      const rawKeys = localStorage.getItem('qllh_deleted_class_keys');
+      if (rawKeys) {
+        const keys = JSON.parse(rawKeys);
+        if (Array.isArray(keys)) {
+          localStorage.setItem('qllh_deleted_class_keys', JSON.stringify(keys.filter((k) => k !== logicKey.toLowerCase().trim())));
+        }
+      }
+    }
+  } catch {}
 }
 
 /**

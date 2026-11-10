@@ -53,6 +53,7 @@ import {
   saveCurrentYearPermanently,
   updateVault,
   debounceCloudSync,
+  unmarkClassAsDeleted,
 } from '../utils/dbStorage';
 
 export interface ClassItem {
@@ -704,6 +705,10 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       const creatorId = getUserScopeId(currentUser);
       const creatorName = currentUser?.fullName || currentUser?.username || 'Giáo viên';
 
+      const normName = name.trim().toLowerCase();
+      const normYear = targetYear.trim();
+      const logicKey = `${normName}__${normYear}`;
+
       const newClass: ClassItem = {
         id: `c_${Date.now()}`,
         year: targetYear,
@@ -713,6 +718,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
         createdBy: creatorId,
         createdByName: creatorName,
       };
+
+      unmarkClassAsDeleted(newClass.id, logicKey);
 
       const updatedList = [...classesData, newClass];
       setClassesData(updatedList);
@@ -735,7 +742,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };
 
-  // Action: Delete Class (CHỈ XÓA TRONG TÀI KHOẢN NÀY, CSDL TÀI KHOẢN KHÁC KHÔNG BỊ ẢNH HƯỞNG)
+  // Action: Delete Class (Xóa triệt để cả local lẫn Firestore, không bao giờ bị phục hồi khi F5)
   const handleDeleteClass = (clsId?: string) => {
     const targetId = clsId || currentClassId;
     if (!targetId) return;
@@ -748,8 +755,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
     const confirmed = confirm(
       `Xác nhận xóa LỚP ${cls.name} (${cls.grade})?\n\n` +
       `- Lớp đang có: ${count} học sinh\n` +
-      `- Toàn bộ học sinh và dữ liệu điểm danh, điểm số của lớp này trong tài khoản của bạn sẽ bị xóa.\n` +
-      `- Các tài khoản khác sẽ hoàn toàn KHÔNG bị ảnh hưởng.\n\n` +
+      `- Toàn bộ học sinh và dữ liệu điểm danh, điểm số của lớp này sẽ bị xóa vĩnh viễn.\n\n` +
       `Bạn có chắc chắn muốn xóa không?`
     );
     if (!confirmed) return;
@@ -766,9 +772,8 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       if (onSelectClassExternal) onSelectClassExternal('');
       setCurrentView('list');
     }
-    deleteClassFromFirestore(targetId, cls.name, cls.year, getUserScopeId(currentUser)).then(() => {
-      pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
-    }).catch(() => {});
+    // Ghi nhận lệnh xóa vĩnh viễn lên Firestore và local tombstones
+    deleteClassFromFirestore(targetId, cls.name, cls.year, getUserScopeId(currentUser)).catch(() => {});
     window.dispatchEvent(new Event('qllh_data_updated'));
   };
 
@@ -1366,19 +1371,25 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
 
     const remainingClasses = classesData.filter((c) => c.year !== targetYear);
     const remainingClassIds = new Set(remainingClasses.map((c) => c.id));
+    const nextStudents = studentsData.filter((s) => remainingClassIds.has(s.classId));
     setClassesData(remainingClasses);
-    setStudentsData((prev) => prev.filter((s) => remainingClassIds.has(s.classId)));
+    setStudentsData(nextStudents);
+    saveClassesPermanently(remainingClasses, currentUser);
+    saveStudentsPermanently(nextStudents, currentUser);
+
     const remainingYears = yearsData.filter((y) => y !== targetYear);
     setYearsData(remainingYears);
+    saveYearsPermanently(remainingYears, currentUser);
+
     const nextYear = remainingYears[0];
     setCurrentYear(nextYear);
+    saveCurrentYearPermanently(nextYear, currentUser);
     localStorage.setItem('qllh_current_year', nextYear);
     setCurrentClassId('');
     if (onSelectClassExternal) onSelectClassExternal('');
     setCurrentView('list');
     deleteYearFromFirestore(targetYear).catch(() => {});
     window.dispatchEvent(new Event('qllh_data_updated'));
-    pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };
 
   // Calculate attendance summary for current week
