@@ -22,6 +22,8 @@ import {
   getSavedCurrentYear,
   getSavedCustomComments,
   saveCustomCommentsPermanently,
+  getSavedGradeComments,
+  saveGradeCommentsPermanently,
   getSavedGradeSortType,
   saveGradeSortTypePermanently,
 } from '../utils/dbStorage';
@@ -78,28 +80,115 @@ export const sortStudentsLikeGradeTab = (
   });
 };
 
-// Built-in high quality pedagogical comments for Tin học (Computer Science)
-const DEFAULT_COMMENTS_T = [
-  'Em học giỏi, tiếp thu bài nhanh và thực hành tốt.',
-  'Em làm bài tốt, tích cực tham gia xây dựng bài học.',
-  'Thao tác máy tính thành thạo, hoàn thành xuất sắc các bài tập.',
-  'Nắm vững kiến thức bài học, sáng tạo trong các bài thực hành.',
-  'Kỹ năng tin học tốt, nhiệt tình giúp đỡ bạn bè cùng tiến bộ.',
-  'Chăm chỉ, hoàn thành bài tập nhanh và chuẩn xác.',
-  'Hiểu bài sâu sắc, thao tác máy chuẩn và tư duy tốt.',
-  'Thực hiện tốt các yêu cầu của giáo viên, năng nổ trong học tập.',
-];
+// Built-in pedagogical comments for Tin học per Grade (Khối 1 -> Khối 5)
+const DEFAULT_GRADE_COMMENTS_T: Record<string, string[]> = {
+  '1': [
+    'Em chăm ngoan, làm quen với máy tính nhanh và thao tác chuột khéo léo.',
+    'Em thực hành tốt các bài tập sử dụng chuột và nhận biết các bộ phận máy tính.',
+    'Biết cách cầm chuột đúng cách, nhấp chuột và kéo thả chính xác.',
+    'Hào hứng học tập, nhận biết nhanh màn hình, bàn phím và thân máy.',
+    'Thực hành vẽ và tô màu phần mềm Paint rất khéo léo, sáng tạo.',
+    'Ngồi đúng tư thế khi ngồi trước máy tính, giữ gìn thiết bị tốt.',
+    'Tiếp thu bài nhanh, làm quen với bàn phím và gõ phím cơ bản rất tốt.',
+    'Thực hành tốt, tích cực tham gia các trò chơi học tập trên máy tính.',
+  ],
+  '2': [
+    'Em gõ phím nhanh, rèn luyện tư thế gõ 10 ngón đúng vị trí.',
+    'Sử dụng chuột và bàn phím thành thạo, hoàn thành tốt các bài luyện gõ.',
+    'Em thao tác trên phần mềm học tập tự tin và chuẩn xác.',
+    'Có ý thức học tập tốt, mở và lưu bài vẽ đúng theo hướng dẫn.',
+    'Nhớ vị trí các phím chức năng cơ bản như Enter, Spacebar, Backspace.',
+    'Thực hành luyện gõ từ ngữ nhanh và chính xác.',
+    'Chăm chỉ luyện tập gõ phím, hoàn thành xuất sắc các yêu cầu bài học.',
+    'Thực hành thành thạo các thao tác cơ bản trên máy tính.',
+  ],
+  '3': [
+    'Em thao tác tệp và thư mục nhanh chóng, biết cách lưu bài gọn gàng.',
+    'Gõ tiếng Việt có dấu thành thạo theo kiểu gõ Telex/Vni.',
+    'Tạo và đổi tên thư mục đúng quy định, biết quản lý dữ liệu học tập.',
+    'Sử dụng phần mềm Unikey tốt, gõ đúng chính tả tiếng Việt.',
+    'Biết tìm kiếm tranh ảnh trên Internet phục vụ cho việc học tập.',
+    'Thao tác sao chép, di chuyển tệp và thư mục rất thành thạo.',
+    'Làm bài thực hành nhanh, giúp đỡ bạn bè cùng hoàn thành bài tập.',
+    'Hiểu bài sâu sắc, có kỹ năng sử dụng máy tính và quản lý tệp tốt.',
+  ],
+  '4': [
+    'Soạn thảo văn bản và chèn hình ảnh trên Word rất đẹp mắt và chuẩn xác.',
+    'Biết định dạng phông chữ, cỡ chữ, màu sắc và căn lề văn bản đúng chuẩn.',
+    'Tạo bài trình chiếu PowerPoint sinh động, biết chèn hình và tạo hiệu ứng.',
+    'Sử dụng bảng biểu và chèn tranh ảnh vào văn bản một cách sáng tạo.',
+    'Biết sử dụng Internet an toàn, tìm kiếm thông tin học tập hiệu quả.',
+    'Thực hành soạn thảo nhanh, bố cục trang văn bản hài hòa, rõ ràng.',
+    'Thuyết trình tự tin với các slide trình chiếu tự thiết kế.',
+    'Kỹ năng tin học xuất sắc, sáng tạo trong các bài thực hành.',
+  ],
+  '5': [
+    'Tư duy lập trình tốt, hoàn thành xuất sắc các dự án Scratch/Logo.',
+    'Thiết kế bài trình chiếu đa phương tiện ấn tượng, bố cục chuyên nghiệp.',
+    'Nắm vững thuật toán cơ bản, biết điều khiển nhân vật chuyển động sáng tạo.',
+    'Sử dụng phần mềm bảng tính và lập công thức tính toán thành thạo.',
+    'Có khả năng tự học và giải quyết các bài toán lập trình rất tốt.',
+    'Kỹ năng công nghệ thông tin nổi bật, tư duy logic và sáng tạo cao.',
+    'Tích cực trao đổi, sáng tạo nhiều sản phẩm tin học có tính ứng dụng cao.',
+    'Thao tác máy tính điêu luyện, tự tin thuyết trình sản phẩm công nghệ.',
+  ],
+};
 
-const DEFAULT_COMMENTS_H = [
-  'Em hoàn thành các nội dung bài học theo yêu cầu.',
-  'Có cố gắng trong giờ học, thao tác máy tính cơ bản đạt yêu cầu.',
-  'Hoàn thành bài tập thực hành, cần chú ý rèn thêm tốc độ gõ phím.',
-  'Nắm được kiến thức cơ bản, cần tự tin hơn khi thực hành trên máy.',
-  'Có tinh thần học tập, cần tập trung hơn trong giờ thực hành.',
-  'Hoàn thành bài học, tích cực luyện tập thêm các thao tác cơ bản.',
-  'Thực hiện được các bài tập, cần rèn luyện thêm kỹ năng sử dụng phần mềm.',
-  'Hoàn thành nội dung môn học, chú ý lắng nghe giáo viên hướng dẫn.',
-];
+const DEFAULT_GRADE_COMMENTS_H: Record<string, string[]> = {
+  '1': [
+    'Em hoàn thành nội dung làm quen với máy tính theo yêu cầu.',
+    'Đã biết cách cầm chuột và nhấp chuột, cần rèn thêm kỹ năng kéo thả.',
+    'Nhận biết được các bộ phận cơ bản của máy tính, chăm chú nghe giảng.',
+    'Hoàn thành bài thực hành tô màu trên máy, cần chú ý tư thế ngồi học.',
+    'Biết thao tác bật/tắt máy theo hướng dẫn của thầy cô.',
+    'Có cố gắng trong các tiết thực hành, cần tự tin hơn khi sử dụng chuột.',
+    'Nhận biết được hàng phím cơ bản, cần rèn luyện thêm.',
+    'Thực hiện được các yêu cầu cơ bản của giáo viên trong giờ học.',
+  ],
+  '2': [
+    'Em hoàn thành các bài học rèn luyện gõ bàn phím theo yêu cầu.',
+    'Biết vị trí các phím cơ bản, cần rèn thêm tốc độ gõ phím.',
+    'Thao tác mở và đóng phần mềm học tập đạt yêu cầu.',
+    'Cần tập trung hơn trong giờ thực hành để gõ phím chuẩn xác hơn.',
+    'Hoàn thành bài tập luyện gõ, cần chú ý dùng đủ các ngón tay.',
+    'Biết mở bài tập trên máy tính và lưu lại theo hướng dẫn.',
+    'Có tinh thần học hỏi, cần tích cực luyện tập gõ từ ngữ thường xuyên.',
+    'Thực hiện được các thao tác cơ bản với bàn phím và chuột.',
+  ],
+  '3': [
+    'Hoàn thành nội dung bài học về quản lý tệp và thư mục.',
+    'Biết tạo thư mục cá nhân, cần chú ý cách đặt tên thư mục không dấu.',
+    'Gõ được tiếng Việt có dấu, cần luyện tập thêm quy tắc gõ Telex/Vni.',
+    'Thao tác lưu bài đúng nơi quy định, cần rèn thêm tốc độ thao tác.',
+    'Nắm được các bước tìm kiếm thông tin cơ bản trên Internet.',
+    'Có cố gắng trong giờ thực hành, cần tự tin hơn khi quản lý dữ liệu.',
+    'Hoàn thành bài tập tại lớp, cần chú ý nghe hướng dẫn của giáo viên.',
+    'Thực hiện được các thao tác sao chép tệp đơn giản.',
+  ],
+  '4': [
+    'Hoàn thành bài tập soạn thảo văn bản và chèn hình ảnh theo yêu cầu.',
+    'Biết định dạng chữ cơ bản, cần rèn thêm kỹ năng căn lề và bố cục.',
+    'Tạo được các trang chiếu PowerPoint cơ bản, cần luyện thêm cách tạo hiệu ứng.',
+    'Biết tìm kiếm và lưu hình ảnh vào bài làm, cần chú ý chọn hình phù hợp.',
+    'Có ý thức học tập, cần chú ý kiểm tra chính tả khi soạn thảo văn bản.',
+    'Hoàn thành bài thực hành trình chiếu, cần tự tin hơn khi trình bày.',
+    'Nắm được kiến thức bài học, cần rèn luyện thêm kỹ năng sử dụng phần mềm.',
+    'Thực hiện được các yêu cầu thực hành của giáo viên.',
+  ],
+  '5': [
+    'Hoàn thành các nội dung bài học lập trình và trình chiếu theo yêu cầu.',
+    'Hiểu các lệnh cơ bản trong Scratch/Logo, cần rèn thêm tư duy giải thuật.',
+    'Tạo được bài trình chiếu hoàn chỉnh, cần chú ý phối hợp màu sắc hài hòa.',
+    'Biết nhập dữ liệu vào bảng tính, cần rèn thêm cách lập công thức tính.',
+    'Có tinh thần cố gắng trong học tập, cần chủ động hơn khi giải quyết bài toán.',
+    'Hoàn thành dự án học tập đúng hạn, cần rèn thêm kỹ năng gỡ lỗi chương trình.',
+    'Nắm được kiến thức tin học cơ bản, cần luyện tập thêm trên máy tính.',
+    'Thực hiện đạt yêu cầu các bài thực hành được giao.',
+  ],
+};
+
+const DEFAULT_COMMENTS_T = DEFAULT_GRADE_COMMENTS_T['1'];
+const DEFAULT_COMMENTS_H = DEFAULT_GRADE_COMMENTS_H['1'];
 
 interface StudentCommentsManagerProps {
   isModal?: boolean;
@@ -133,44 +222,65 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
   const [selectedGrade, setSelectedGrade] = useState<string>('1'); // '1' | '2' | '3' | '4' | '5' | 'all'
   const [selectedTerm, setSelectedTerm] = useState<'hk1' | 'hk2'>('hk1');
 
-  // Comments state
-  const [commentsT, setCommentsT] = useState<string[]>(() => {
-    const saved = getSavedCustomComments(currentUser, 'T');
-    return saved.length > 0 ? saved : DEFAULT_COMMENTS_T;
+  // Menu Khối nạp nhận xét: Khối 1 đến 5 (theo yêu cầu người dùng)
+  const [uploadGrade, setUploadGrade] = useState<'1' | '2' | '3' | '4' | '5'>('1');
+
+  // Ngân hàng nhận xét phân bổ độc lập theo từng Khối (Khối 1 -> Khối 5)
+  const [gradeCommentsT, setGradeCommentsT] = useState<Record<string, string[]>>(() => {
+    const saved = getSavedGradeComments(currentUser, 'T');
+    const result: Record<string, string[]> = {};
+    for (const g of ['1', '2', '3', '4', '5']) {
+      result[g] = saved[g] && saved[g].length > 0 ? saved[g] : [...DEFAULT_GRADE_COMMENTS_T[g]];
+    }
+    return result;
   });
 
-  const [commentsH, setCommentsH] = useState<string[]>(() => {
-    const saved = getSavedCustomComments(currentUser, 'H');
-    return saved.length > 0 ? saved : DEFAULT_COMMENTS_H;
+  const [gradeCommentsH, setGradeCommentsH] = useState<Record<string, string[]>>(() => {
+    const saved = getSavedGradeComments(currentUser, 'H');
+    const result: Record<string, string[]> = {};
+    for (const g of ['1', '2', '3', '4', '5']) {
+      result[g] = saved[g] && saved[g].length > 0 ? saved[g] : [...DEFAULT_GRADE_COMMENTS_H[g]];
+    }
+    return result;
   });
 
-  const [fileTName, setFileTName] = useState<string>(() => {
-    return localStorage.getItem('qllh_custom_comments_t_name') || '';
+  // Tên file đã nạp theo từng khối
+  const [fileGradeTNames, setFileGradeTNames] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('qllh_file_grade_t_names');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
   });
 
-  const [fileHName, setFileHName] = useState<string>(() => {
-    return localStorage.getItem('qllh_custom_comments_h_name') || '';
+  const [fileGradeHNames, setFileGradeHNames] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('qllh_file_grade_h_names');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
   });
 
   const fileTInputRef = useRef<HTMLInputElement>(null);
   const fileHInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync comments changes to user-scoped storage
+  // Tự động chuyển Khối nạp nhận xét khi người dùng chọn Khối xuất ở Mục 1
   useEffect(() => {
-    saveCustomCommentsPermanently(commentsT, currentUser, 'T');
-  }, [commentsT, currentUser?.id]);
+    if (selectedGrade !== 'all' && ['1', '2', '3', '4', '5'].includes(selectedGrade)) {
+      setUploadGrade(selectedGrade as '1' | '2' | '3' | '4' | '5');
+    }
+  }, [selectedGrade]);
+
+  // Lưu tên file theo khối
+  useEffect(() => {
+    localStorage.setItem('qllh_file_grade_t_names', JSON.stringify(fileGradeTNames));
+  }, [fileGradeTNames]);
 
   useEffect(() => {
-    saveCustomCommentsPermanently(commentsH, currentUser, 'H');
-  }, [commentsH, currentUser?.id]);
-
-  useEffect(() => {
-    localStorage.setItem('qllh_custom_comments_t_name', fileTName);
-  }, [fileTName]);
-
-  useEffect(() => {
-    localStorage.setItem('qllh_custom_comments_h_name', fileHName);
-  }, [fileHName]);
+    localStorage.setItem('qllh_file_grade_h_names', JSON.stringify(fileGradeHNames));
+  }, [fileGradeHNames]);
 
   // Sync background data & sort order from Thẻ Điểm
   useEffect(() => {
@@ -181,13 +291,31 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
         setGradeData(getSavedGrades(currentUser));
         const savedSort = getSavedGradeSortType(currentUser);
         setSortOrder(savedSort);
-        const commT = getSavedCustomComments(currentUser, 'T');
-        if (commT && commT.length > 0) {
-          setCommentsT((prev) => (JSON.stringify(prev) === JSON.stringify(commT) ? prev : commT));
+
+        const commTByGrade = getSavedGradeComments(currentUser, 'T');
+        if (commTByGrade && Object.keys(commTByGrade).length > 0) {
+          setGradeCommentsT((prev) => {
+            const next = { ...prev };
+            for (const g of ['1', '2', '3', '4', '5']) {
+              if (commTByGrade[g] && commTByGrade[g].length > 0) {
+                next[g] = commTByGrade[g];
+              }
+            }
+            return next;
+          });
         }
-        const commH = getSavedCustomComments(currentUser, 'H');
-        if (commH && commH.length > 0) {
-          setCommentsH((prev) => (JSON.stringify(prev) === JSON.stringify(commH) ? prev : commH));
+
+        const commHByGrade = getSavedGradeComments(currentUser, 'H');
+        if (commHByGrade && Object.keys(commHByGrade).length > 0) {
+          setGradeCommentsH((prev) => {
+            const next = { ...prev };
+            for (const g of ['1', '2', '3', '4', '5']) {
+              if (commHByGrade[g] && commHByGrade[g].length > 0) {
+                next[g] = commHByGrade[g];
+              }
+            }
+            return next;
+          });
         }
       } catch {}
     };
@@ -211,6 +339,45 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
       window.removeEventListener('storage', handleSync);
     };
   }, [currentUser?.id, currentUser?.username]);
+
+  // Nhận xét hiện tại của Khối đang được chọn trên Menu nạp
+  const currentCommentsT = (gradeCommentsT[uploadGrade] && gradeCommentsT[uploadGrade].length > 0)
+    ? gradeCommentsT[uploadGrade]
+    : (DEFAULT_GRADE_COMMENTS_T[uploadGrade] || DEFAULT_COMMENTS_T);
+
+  const currentCommentsH = (gradeCommentsH[uploadGrade] && gradeCommentsH[uploadGrade].length > 0)
+    ? gradeCommentsH[uploadGrade]
+    : (DEFAULT_GRADE_COMMENTS_H[uploadGrade] || DEFAULT_COMMENTS_H);
+
+  const currentFileTName = fileGradeTNames[uploadGrade] || '';
+  const currentFileHName = fileGradeHNames[uploadGrade] || '';
+
+  // Sao chép nhanh nhận xét của khối đang chọn sang toàn bộ các khối khác
+  const handleApplyToAllGrades = () => {
+    if (confirm(`Bạn có chắc chắn muốn sao chép bộ nhận xét của Khối ${uploadGrade} sang tất cả các khối (Khối 1, 2, 3, 4, 5)?`)) {
+      const newGradeT: Record<string, string[]> = {};
+      const newGradeH: Record<string, string[]> = {};
+      const newFileT: Record<string, string> = {};
+      const newFileH: Record<string, string> = {};
+
+      for (const g of ['1', '2', '3', '4', '5']) {
+        newGradeT[g] = [...currentCommentsT];
+        newGradeH[g] = [...currentCommentsH];
+        if (currentFileTName) newFileT[g] = `${currentFileTName} (áp dụng từ K${uploadGrade})`;
+        if (currentFileHName) newFileH[g] = `${currentFileHName} (áp dụng từ K${uploadGrade})`;
+      }
+
+      setGradeCommentsT(newGradeT);
+      setGradeCommentsH(newGradeH);
+      setFileGradeTNames(newFileT);
+      setFileGradeHNames(newFileH);
+
+      saveGradeCommentsPermanently(newGradeT, currentUser, 'T');
+      saveGradeCommentsPermanently(newGradeH, currentUser, 'H');
+
+      alert(`✅ Đã áp dụng bộ nhận xét của Khối ${uploadGrade} cho toàn bộ Khối 1 đến 5!`);
+    }
+  };
 
   const handleSortOrderChange = (newOrder: 'default' | 'alphabet' | 'code') => {
     setSortOrder(newOrder);
@@ -296,13 +463,23 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
 
         if (parsedComments.length > 0) {
           if (type === 'T') {
-            setCommentsT(parsedComments);
-            setFileTName(file.name);
+            const updated = {
+              ...gradeCommentsT,
+              [uploadGrade]: parsedComments,
+            };
+            setGradeCommentsT(updated);
+            setFileGradeTNames((prev) => ({ ...prev, [uploadGrade]: file.name }));
+            saveGradeCommentsPermanently(updated, currentUser, 'T');
           } else {
-            setCommentsH(parsedComments);
-            setFileHName(file.name);
+            const updated = {
+              ...gradeCommentsH,
+              [uploadGrade]: parsedComments,
+            };
+            setGradeCommentsH(updated);
+            setFileGradeHNames((prev) => ({ ...prev, [uploadGrade]: file.name }));
+            saveGradeCommentsPermanently(updated, currentUser, 'H');
           }
-          alert(`✅ Đã nạp thành công ${parsedComments.length} nhận xét loại ${type} từ file ${file.name}!`);
+          alert(`✅ Đã nạp thành công ${parsedComments.length} nhận xét loại ${type} cho Khối ${uploadGrade} từ file "${file.name}"!`);
         } else {
           alert('Không tìm thấy nhận xét hợp lệ! File cần có cột "nhận xét" (như ảnh 1).');
         }
@@ -314,31 +491,47 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
     reader.readAsArrayBuffer(file);
   };
 
-  // Download Sample Template for T or H (Image 1 format)
+  // Download Sample Template for T or H for the active Grade
   const handleDownloadSampleFile = (type: 'T' | 'H') => {
-    const sampleList = type === 'T' ? DEFAULT_COMMENTS_T : DEFAULT_COMMENTS_H;
+    const sampleList = type === 'T'
+      ? (DEFAULT_GRADE_COMMENTS_T[uploadGrade] || DEFAULT_COMMENTS_T)
+      : (DEFAULT_GRADE_COMMENTS_H[uploadGrade] || DEFAULT_COMMENTS_H);
     const rows = sampleList.map((cmt, idx) => ({
       STT: idx + 1,
       'nhận xét': cmt,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
-    worksheet['!cols'] = [{ wch: 8 }, { wch: 60 }];
+    worksheet['!cols'] = [{ wch: 8 }, { wch: 65 }];
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, `Nhan_Xet_Loai_${type}`);
-    XLSX.writeFile(workbook, `Mau_Nhan_Xet_Loai_${type}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Nhan_Xet_Loai_${type}_Khoi_${uploadGrade}`);
+    XLSX.writeFile(workbook, `Mau_Nhan_Xet_Loai_${type}_Khoi_${uploadGrade}.xlsx`);
   };
 
-  // Reset to default sample comments
+  // Reset to default sample comments for current Grade
   const handleResetDefaultComments = (type: 'T' | 'H') => {
-    if (confirm(`Đặt lại danh sách nhận xét loại ${type} về mẫu chuẩn ban đầu?`)) {
+    if (confirm(`Đặt lại danh sách nhận xét loại ${type} của Khối ${uploadGrade} về mẫu chuẩn ban đầu?`)) {
       if (type === 'T') {
-        setCommentsT(DEFAULT_COMMENTS_T);
-        setFileTName('');
+        const defaultList = DEFAULT_GRADE_COMMENTS_T[uploadGrade] || DEFAULT_COMMENTS_T;
+        const updated = { ...gradeCommentsT, [uploadGrade]: defaultList };
+        setGradeCommentsT(updated);
+        setFileGradeTNames((prev) => {
+          const next = { ...prev };
+          delete next[uploadGrade];
+          return next;
+        });
+        saveGradeCommentsPermanently(updated, currentUser, 'T');
       } else {
-        setCommentsH(DEFAULT_COMMENTS_H);
-        setFileHName('');
+        const defaultList = DEFAULT_GRADE_COMMENTS_H[uploadGrade] || DEFAULT_COMMENTS_H;
+        const updated = { ...gradeCommentsH, [uploadGrade]: defaultList };
+        setGradeCommentsH(updated);
+        setFileGradeHNames((prev) => {
+          const next = { ...prev };
+          delete next[uploadGrade];
+          return next;
+        });
+        saveGradeCommentsPermanently(updated, currentUser, 'H');
       }
     }
   };
@@ -359,15 +552,10 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
     return finalName;
   };
 
-  // Perform Generation & Export Excel (Image 2 format)
+  // Perform Generation & Export Excel (Image 2 format) with Grade-specific comments
   const handleExecuteExport = () => {
     if (matchingClasses.length === 0) {
       alert(`Không tìm thấy lớp nào thuộc Khối ${selectedGrade} trong năm học ${currentYear}!`);
-      return;
-    }
-
-    if (commentsT.length === 0 || commentsH.length === 0) {
-      alert('Vui lòng đảm bảo đã có danh sách nhận xét cho cả loại T và loại H!');
       return;
     }
 
@@ -377,6 +565,20 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
 
     // Process each class as its own sheet
     for (const cls of matchingClasses) {
+      // Xác định khối của lớp học (VD: Lớp 1/1 -> Khối 1; 2/2 -> Khối 2; 5/3 -> Khối 5)
+      const clsCleanGrade = cls.grade ? String(cls.grade).replace(/[^0-9]/g, '') : '';
+      const clsNameFirstChar = cls.name.trim().charAt(0);
+      const clsGrade = clsCleanGrade || clsNameFirstChar || '1';
+
+      // Lấy đúng ngân hàng nhận xét của khối tương ứng (theo đúng yêu cầu của người dùng)
+      const clsCommentsT = (gradeCommentsT[clsGrade] && gradeCommentsT[clsGrade].length > 0)
+        ? gradeCommentsT[clsGrade]
+        : (DEFAULT_GRADE_COMMENTS_T[clsGrade] || DEFAULT_COMMENTS_T);
+
+      const clsCommentsH = (gradeCommentsH[clsGrade] && gradeCommentsH[clsGrade].length > 0)
+        ? gradeCommentsH[clsGrade]
+        : (DEFAULT_GRADE_COMMENTS_H[clsGrade] || DEFAULT_COMMENTS_H);
+
       // Sort students strictly matching Thẻ Điểm (Chuẩn / Alphabet / Mã HS)
       const rawClassStudents = studentsList.filter((s) => s.classId === cls.id);
       const classStudents = sortStudentsLikeGradeTab(rawClassStudents, sortOrder);
@@ -404,13 +606,13 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
           }
         }
 
-        // Pick comment according to rank with cyclic wrap-around
+        // Pick comment according to rank with cyclic wrap-around from that specific grade's bank
         let comment = '';
         if (rank === 'T') {
-          comment = commentsT[countT % commentsT.length];
+          comment = clsCommentsT[countT % clsCommentsT.length];
           countT++;
         } else {
-          comment = commentsH[countH % commentsH.length];
+          comment = clsCommentsH[countH % clsCommentsH.length];
           countH++;
         }
 
@@ -622,26 +824,85 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
           </div>
         </div>
 
-        {/* 2 Nút Add File Excel (Ảnh 1 format) */}
-        <div>
-          <label className="block text-xs font-bold text-slate-800 mb-3">
-            3. Nạp 2 file Excel nhận xét cho loại H và loại T (như ảnh 1):
-          </label>
+        {/* 3. Nạp 2 file Excel nhận xét cho loại H và loại T theo từng Khối (1 -> 5) */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <label className="block text-xs font-bold text-slate-800">
+                3. Menu Khối nạp file Excel nhận xét loại H và loại T (Khối 1 đến 5):
+              </label>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Nhấp chọn từng <strong>Khối (1, 2, 3, 4, 5)</strong> bên dưới để nạp nhận xét tương ứng. Khi xuất file Excel, mỗi lớp sẽ tự động lấy đúng nhận xét của khối đó.
+              </p>
+            </div>
+
+            {/* Nút sao chép tiện ích */}
+            <button
+              type="button"
+              onClick={handleApplyToAllGrades}
+              className="text-[11px] font-bold text-[#0070F3] hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              title="Sao chép nhận xét của khối này sang toàn bộ 5 khối"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span>Dùng nhận xét Khối {uploadGrade} cho cả 5 Khối</span>
+            </button>
+          </div>
+
+          {/* MENU KHỐI (1 ĐẾN 5) THEO ĐÚNG YÊU CẦU NGƯỜI DÙNG */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200 shadow-2xs">
+            {(['1', '2', '3', '4', '5'] as const).map((g) => {
+              const isActive = uploadGrade === g;
+              const countT = (gradeCommentsT[g] && gradeCommentsT[g].length > 0)
+                ? gradeCommentsT[g].length
+                : (DEFAULT_GRADE_COMMENTS_T[g] || DEFAULT_COMMENTS_T).length;
+              const countH = (gradeCommentsH[g] && gradeCommentsH[g].length > 0)
+                ? gradeCommentsH[g].length
+                : (DEFAULT_GRADE_COMMENTS_H[g] || DEFAULT_COMMENTS_H).length;
+              const hasCustomT = !!fileGradeTNames[g];
+              const hasCustomH = !!fileGradeHNames[g];
+
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setUploadGrade(g)}
+                  className={`relative py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 border cursor-pointer ${
+                    isActive
+                      ? 'bg-white text-[#0070F3] border-[#0070F3] shadow-sm ring-2 ring-blue-100'
+                      : 'bg-transparent text-slate-600 border-transparent hover:bg-white/70 hover:text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-black tracking-tight">Khối {g}</span>
+                    {(hasCustomT || hasCustomH) && (
+                      <span
+                        className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"
+                        title="Đã nạp file Excel riêng cho khối này"
+                      />
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-semibold ${isActive ? 'text-blue-600 font-bold' : 'text-slate-500'}`}>
+                    {countH} câu H • {countT} câu T
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Box 1: File Nhận xét loại H */}
             <div className="p-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/40 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-100 text-blue-700">
-                  <span>Nhận xét loại H (Hoàn thành)</span>
+                  <span>Nhận xét loại H (Hoàn thành) — Khối {uploadGrade}</span>
                 </span>
                 <span className="text-xs font-bold text-slate-600">
-                  Đang có {commentsH.length} câu
+                  Đang có {currentCommentsH.length} câu
                 </span>
               </div>
 
               <p className="text-xs text-slate-600 line-clamp-2 italic">
-                Ví dụ: "{commentsH[0]}"
+                Ví dụ (K{uploadGrade}): "{currentCommentsH[0]}"
               </p>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -651,34 +912,38 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
                   className="px-3.5 py-2 bg-[#0070F3] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Nạp file Excel nhận xét H</span>
+                  <span>Nạp file Excel nhận xét H Khối {uploadGrade}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDownloadSampleFile('H')}
                   className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-                  title="Tải file Excel mẫu loại H như ảnh 1"
+                  title={`Tải file Excel mẫu loại H cho Khối ${uploadGrade}`}
                 >
                   <Download className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Tải mẫu H</span>
+                  <span>Tải mẫu H (K{uploadGrade})</span>
                 </button>
 
-                {fileHName && (
+                {currentFileHName && (
                   <button
                     type="button"
                     onClick={() => handleResetDefaultComments('H')}
                     className="p-2 text-slate-400 hover:text-rose-500 rounded-xl"
-                    title="Đặt lại câu nhận xét mặc định"
+                    title={`Đặt lại câu nhận xét H Khối ${uploadGrade} về mặc định`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {fileHName && (
+              {currentFileHName ? (
                 <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Đã nạp từ file: {fileHName}
+                  <Check className="w-3 h-3" /> Đã nạp cho Khối {uploadGrade} từ file: {currentFileHName}
+                </p>
+              ) : (
+                <p className="text-[11px] font-medium text-slate-500">
+                  (Đang dùng bộ nhận xét mẫu chuẩn Tin học Khối {uploadGrade})
                 </p>
               )}
             </div>
@@ -687,15 +952,15 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
             <div className="p-4 rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50/40 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-700">
-                  <span>Nhận xét loại T (Hoàn thành Tốt)</span>
+                  <span>Nhận xét loại T (Hoàn thành Tốt) — Khối {uploadGrade}</span>
                 </span>
                 <span className="text-xs font-bold text-slate-600">
-                  Đang có {commentsT.length} câu
+                  Đang có {currentCommentsT.length} câu
                 </span>
               </div>
 
               <p className="text-xs text-slate-600 line-clamp-2 italic">
-                Ví dụ: "{commentsT[0]}"
+                Ví dụ (K{uploadGrade}): "{currentCommentsT[0]}"
               </p>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -705,34 +970,38 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Nạp file Excel nhận xét T</span>
+                  <span>Nạp file Excel nhận xét T Khối {uploadGrade}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDownloadSampleFile('T')}
                   className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
-                  title="Tải file Excel mẫu loại T như ảnh 1"
+                  title={`Tải file Excel mẫu loại T cho Khối ${uploadGrade}`}
                 >
                   <Download className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Tải mẫu T</span>
+                  <span>Tải mẫu T (K{uploadGrade})</span>
                 </button>
 
-                {fileTName && (
+                {currentFileTName && (
                   <button
                     type="button"
                     onClick={() => handleResetDefaultComments('T')}
                     className="p-2 text-slate-400 hover:text-rose-500 rounded-xl"
-                    title="Đặt lại câu nhận xét mặc định"
+                    title={`Đặt lại câu nhận xét T Khối ${uploadGrade} về mặc định`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {fileTName && (
+              {currentFileTName ? (
                 <p className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Đã nạp từ file: {fileTName}
+                  <Check className="w-3 h-3" /> Đã nạp cho Khối {uploadGrade} từ file: {currentFileTName}
+                </p>
+              ) : (
+                <p className="text-[11px] font-medium text-slate-500">
+                  (Đang dùng bộ nhận xét mẫu chuẩn Tin học Khối {uploadGrade})
                 </p>
               )}
             </div>
@@ -743,14 +1012,14 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
         <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">
           <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p>
-            <strong>Cơ chế tự động:</strong> Mỗi học sinh được gán 1 câu nhận xét. Nếu số lượng nhận xét trong file ít hơn số học sinh của lớp, hệ thống sẽ tự động quay vòng lấy lại các nhận xét phía trên từ đầu đến cuối theo đúng thứ tự.
+            <strong>Cơ chế tự động theo Khối:</strong> Khi xuất file Excel, mỗi lớp (VD: 1/1, 2/2, 3/1, 4/3, 5/2...) sẽ tự động lấy câu nhận xét của đúng Khối tương ứng. Mỗi học sinh được gán 1 câu theo xếp loại T/H; nếu số nhận xét ít hơn số học sinh của lớp, hệ thống sẽ tự động quay vòng từ đầu đến cuối theo thứ tự.
           </p>
         </div>
 
         {/* Nút Thực hiện Xuất file Excel */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-100">
           <div className="text-xs text-slate-600 font-semibold">
-            Sẽ xuất file Excel gồm <strong>{matchingClasses.length} Sheet</strong> (mỗi sheet là 1 lớp).
+            Sẽ xuất file Excel gồm <strong>{matchingClasses.length} Sheet</strong> (mỗi sheet là 1 lớp thuộc {selectedGrade === 'all' ? 'tất cả các khối' : `Khối ${selectedGrade}`}).
           </div>
 
           <button
@@ -802,10 +1071,21 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
                     if (!rank) {
                       rank = rec.total !== '' && Number(rec.total) >= 9 ? 'T' : 'H';
                     }
+
+                    // Lấy nhận xét đúng theo khối của previewClass
+                    const prevCleanGrade = previewClass.grade ? String(previewClass.grade).replace(/[^0-9]/g, '') : '';
+                    const prevGrade = prevCleanGrade || previewClass.name.trim().charAt(0) || '1';
+                    const prevCommentsT = (gradeCommentsT[prevGrade] && gradeCommentsT[prevGrade].length > 0)
+                      ? gradeCommentsT[prevGrade]
+                      : (DEFAULT_GRADE_COMMENTS_T[prevGrade] || DEFAULT_COMMENTS_T);
+                    const prevCommentsH = (gradeCommentsH[prevGrade] && gradeCommentsH[prevGrade].length > 0)
+                      ? gradeCommentsH[prevGrade]
+                      : (DEFAULT_GRADE_COMMENTS_H[prevGrade] || DEFAULT_COMMENTS_H);
+
                     const cmt =
                       rank === 'T'
-                        ? commentsT[idx % commentsT.length]
-                        : commentsH[idx % commentsH.length];
+                        ? prevCommentsT[idx % prevCommentsT.length]
+                        : prevCommentsH[idx % prevCommentsH.length];
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50">

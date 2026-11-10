@@ -124,6 +124,8 @@ export interface AppSyncData {
   submissions?: any[];
   commentsT?: string[];
   commentsH?: string[];
+  gradeCommentsT?: Record<string, string[]>;
+  gradeCommentsH?: Record<string, string[]>;
   quizBank?: any[];
   resources?: any[];
   gradeSortType?: string;
@@ -483,6 +485,8 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
   let finalCurrentYear = localStorage.getItem(userCurrentYearKey) || localStorage.getItem('qllh_current_year') || '2026-2027';
   let finalCommentsT = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t`) || localStorage.getItem('qllh_custom_comments_t') || '[]');
   let finalCommentsH = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h`) || localStorage.getItem('qllh_custom_comments_h') || '[]');
+  let finalGradeCommentsT = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t_by_grade`) || localStorage.getItem('qllh_custom_comments_t_by_grade') || '{}');
+  let finalGradeCommentsH = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h_by_grade`) || localStorage.getItem('qllh_custom_comments_h_by_grade') || '{}');
 
   const db = getFirebaseDb();
   if (db) {
@@ -513,6 +517,12 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
         }
         if (serverData.commentsH && Array.isArray(serverData.commentsH)) {
           finalCommentsH = Array.from(new Set([...serverData.commentsH, ...finalCommentsH]));
+        }
+        if (serverData.gradeCommentsT && typeof serverData.gradeCommentsT === 'object') {
+          finalGradeCommentsT = { ...serverData.gradeCommentsT, ...finalGradeCommentsT };
+        }
+        if (serverData.gradeCommentsH && typeof serverData.gradeCommentsH === 'object') {
+          finalGradeCommentsH = { ...serverData.gradeCommentsH, ...finalGradeCommentsH };
         }
         if (serverData.quizBank && Array.isArray(serverData.quizBank) && serverData.quizBank.length > 0) {
           const qMap = new Map();
@@ -551,6 +561,8 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
     gradeSortType: localStorage.getItem(`qllh_user_${cleanId}_grade_sort`) || localStorage.getItem('qllh_grade_sort_type') || 'default',
     commentsT: finalCommentsT,
     commentsH: finalCommentsH,
+    gradeCommentsT: finalGradeCommentsT,
+    gradeCommentsH: finalGradeCommentsH,
     ownerId: userId,
     updatedAt: new Date().toISOString(),
     lastUpdatedBy: userId,
@@ -947,6 +959,14 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
         localStorage.setItem(`qllh_user_${cleanId}_comments_h`, JSON.stringify(data.commentsH));
         localStorage.setItem('qllh_custom_comments_h', JSON.stringify(data.commentsH));
       }
+      if (data.gradeCommentsT && typeof data.gradeCommentsT === 'object') {
+        localStorage.setItem(`qllh_user_${cleanId}_comments_t_by_grade`, JSON.stringify(data.gradeCommentsT));
+        localStorage.setItem('qllh_custom_comments_t_by_grade', JSON.stringify(data.gradeCommentsT));
+      }
+      if (data.gradeCommentsH && typeof data.gradeCommentsH === 'object') {
+        localStorage.setItem(`qllh_user_${cleanId}_comments_h_by_grade`, JSON.stringify(data.gradeCommentsH));
+        localStorage.setItem('qllh_custom_comments_h_by_grade', JSON.stringify(data.gradeCommentsH));
+      }
       if (data.quizBank && Array.isArray(data.quizBank)) {
         localStorage.setItem('qllh_quiz_bank', JSON.stringify(data.quizBank));
       }
@@ -1086,6 +1106,14 @@ export function subscribeToFirestoreData(
           if (rawData.commentsH && Array.isArray(rawData.commentsH)) {
             localStorage.setItem(`qllh_user_${cleanId}_comments_h`, JSON.stringify(rawData.commentsH));
             localStorage.setItem('qllh_custom_comments_h', JSON.stringify(rawData.commentsH));
+          }
+          if (rawData.gradeCommentsT && typeof rawData.gradeCommentsT === 'object') {
+            localStorage.setItem(`qllh_user_${cleanId}_comments_t_by_grade`, JSON.stringify(rawData.gradeCommentsT));
+            localStorage.setItem('qllh_custom_comments_t_by_grade', JSON.stringify(rawData.gradeCommentsT));
+          }
+          if (rawData.gradeCommentsH && typeof rawData.gradeCommentsH === 'object') {
+            localStorage.setItem(`qllh_user_${cleanId}_comments_h_by_grade`, JSON.stringify(rawData.gradeCommentsH));
+            localStorage.setItem('qllh_custom_comments_h_by_grade', JSON.stringify(rawData.gradeCommentsH));
           }
 
           // Đồng bộ Trắc nghiệm & Bài thi

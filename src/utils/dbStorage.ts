@@ -425,6 +425,41 @@ export function getSavedCustomComments(user?: UserAccount | string | null, type:
 }
 
 /**
+ * Đọc ngân hàng nhận xét phân theo từng khối lớp (Khối 1 -> 5)
+ */
+export function getSavedGradeComments(
+  user?: UserAccount | string | null,
+  type: 'T' | 'H' = 'T'
+): Record<string, string[]> {
+  const userId = getUserScopeId(user);
+  const keys = getUserStorageKeys(userId);
+  const storageKey = type === 'T' ? `${keys.COMMENTS_T}_by_grade` : `${keys.COMMENTS_H}_by_grade`;
+
+  try {
+    const json = localStorage.getItem(storageKey);
+    if (json) {
+      const parsed = JSON.parse(json);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+    const legacyKey = `qllh_custom_comments_${type.toLowerCase()}_by_grade`;
+    const legJson = localStorage.getItem(legacyKey);
+    if (legJson) {
+      const parsed = JSON.parse(legJson);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+
+  const baseList = getSavedCustomComments(user, type);
+  return {
+    '1': [...baseList],
+    '2': [...baseList],
+    '3': [...baseList],
+    '4': [...baseList],
+    '5': [...baseList],
+  };
+}
+
+/**
  * Đọc cấu hình sắp xếp điểm
  */
 export function getSavedGradeSortType(user?: UserAccount | string | null): 'default' | 'alphabet' | 'code' {
@@ -625,6 +660,28 @@ export function saveCustomCommentsPermanently(
     localStorage.setItem(legacyKey, jsonStr);
   }
   debounceCloudSync(userId);
+}
+
+/**
+ * Lưu ngân hàng nhận xét phân theo từng khối lớp (Khối 1 -> 5)
+ */
+export function saveGradeCommentsPermanently(
+  gradeComments: Record<string, string[]>,
+  user?: UserAccount | string | null,
+  type: 'T' | 'H' = 'T'
+) {
+  const userId = getUserScopeId(user);
+  const keys = getUserStorageKeys(userId);
+  const storageKey = type === 'T' ? `${keys.COMMENTS_T}_by_grade` : `${keys.COMMENTS_H}_by_grade`;
+  const jsonStr = JSON.stringify(gradeComments);
+  localStorage.setItem(storageKey, jsonStr);
+  localStorage.setItem(`qllh_custom_comments_${type.toLowerCase()}_by_grade`, jsonStr);
+
+  if (gradeComments['1'] && Array.isArray(gradeComments['1'])) {
+    saveCustomCommentsPermanently(gradeComments['1'], user, type);
+  } else {
+    debounceCloudSync(userId);
+  }
 }
 
 /**
