@@ -12,6 +12,7 @@ import {
   Share2
 } from 'lucide-react';
 import { DigitalResource } from '../types';
+import { pushAllDataToFirestore } from '../firebase';
 
 interface DigitalResourcesProps {
   resources: DigitalResource[];
@@ -58,7 +59,11 @@ export const DigitalResources: React.FC<DigitalResourcesProps> = ({
       materialsCount: 2
     };
 
-    setResources((prev) => [newRes, ...prev]);
+    const updated = [newRes, ...resources];
+    setResources(updated);
+    localStorage.setItem('qllh_digital_resources', JSON.stringify(updated));
+    pushAllDataToFirestore().catch(() => {});
+
     setShowAddModal(false);
     setNewTitle('');
     setNewDescription('');

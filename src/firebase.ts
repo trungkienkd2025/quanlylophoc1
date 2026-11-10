@@ -125,6 +125,8 @@ export interface AppSyncData {
   commentsT?: string[];
   commentsH?: string[];
   quizBank?: any[];
+  resources?: any[];
+  gradeSortType?: string;
   ownerId?: string;
   updatedAt: string;
   lastUpdatedBy?: string;
@@ -356,42 +358,21 @@ export function mergeStudentsSafely(
 }
 
 /**
- * Hợp nhất an toàn danh sách tài khoản
+ * Hợp nhất an toàn danh sách tài khoản (Server là nguồn gốc thẩm quyền cao nhất)
  */
 export function mergeAccountsSafely(serverAccounts: any[]): any[] {
+  if (Array.isArray(serverAccounts) && serverAccounts.length > 0) {
+    return serverAccounts;
+  }
   let localAccounts: any[] = [];
   try {
     const raw = localStorage.getItem('qllh_user_accounts');
     if (raw) {
       const p = JSON.parse(raw);
-      if (Array.isArray(p)) localAccounts = p;
+      if (Array.isArray(p) && p.length > 0) return p;
     }
   } catch {}
-
-  let deletedIds = new Set<string>();
-  try {
-    const d = localStorage.getItem('qllh_deleted_account_ids');
-    if (d) deletedIds = new Set(JSON.parse(d));
-  } catch {}
-
-  const map = new Map<string, any>();
-  (serverAccounts || []).forEach((a) => {
-    const key = a?.id || a?.username;
-    if (key && !deletedIds.has(key)) {
-      map.set(key, a);
-    }
-  });
-  (localAccounts || []).forEach((a) => {
-    const key = a?.id || a?.username;
-    if (key && !deletedIds.has(key)) {
-      if (!map.has(key)) {
-        map.set(key, a);
-      } else {
-        map.set(key, { ...map.get(key), ...a });
-      }
-    }
-  });
-  return Array.from(map.values());
+  return [];
 }
 
 /**
@@ -533,6 +514,20 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
         if (serverData.commentsH && Array.isArray(serverData.commentsH)) {
           finalCommentsH = Array.from(new Set([...serverData.commentsH, ...finalCommentsH]));
         }
+        if (serverData.quizBank && Array.isArray(serverData.quizBank) && serverData.quizBank.length > 0) {
+          const qMap = new Map();
+          serverData.quizBank.forEach((q: any) => q && q.id && qMap.set(q.id, q));
+          const localQ = JSON.parse(localStorage.getItem('qllh_quiz_bank') || '[]');
+          (localQ || []).forEach((q: any) => q && q.id && qMap.set(q.id, q));
+          localStorage.setItem('qllh_quiz_bank', JSON.stringify(Array.from(qMap.values())));
+        }
+        if (serverData.resources && Array.isArray(serverData.resources) && serverData.resources.length > 0) {
+          const rMap = new Map();
+          serverData.resources.forEach((r: any) => r && r.id && rMap.set(r.id, r));
+          const localR = JSON.parse(localStorage.getItem('qllh_digital_resources') || '[]');
+          (localR || []).forEach((r: any) => r && r.id && rMap.set(r.id, r));
+          localStorage.setItem('qllh_digital_resources', JSON.stringify(Array.from(rMap.values())));
+        }
       }
     } catch (err) {
       console.warn('Đọc Firestore nhẹ trước hợp nhất:', err);
@@ -552,6 +547,8 @@ export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverr
     currentYear: finalCurrentYear,
     submissions: JSON.parse(localStorage.getItem('qllh_quiz_submissions') || '[]'),
     quizBank: JSON.parse(localStorage.getItem('qllh_quiz_bank') || '[]'),
+    resources: JSON.parse(localStorage.getItem('qllh_digital_resources') || '[]'),
+    gradeSortType: localStorage.getItem(`qllh_user_${cleanId}_grade_sort`) || localStorage.getItem('qllh_grade_sort_type') || 'default',
     commentsT: finalCommentsT,
     commentsH: finalCommentsH,
     ownerId: userId,
@@ -956,6 +953,13 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
       if (data.submissions && Array.isArray(data.submissions)) {
         localStorage.setItem('qllh_quiz_submissions', JSON.stringify(data.submissions));
       }
+      if (data.resources && Array.isArray(data.resources)) {
+        localStorage.setItem('qllh_digital_resources', JSON.stringify(data.resources));
+      }
+      if (data.gradeSortType) {
+        localStorage.setItem(`qllh_user_${cleanId}_grade_sort`, data.gradeSortType);
+        localStorage.setItem('qllh_grade_sort_type', data.gradeSortType);
+      }
 
       // Phát sự kiện để toàn bộ giao diện cập nhật ngay lập tức
       window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'cloud_sync', data } }));
@@ -1014,6 +1018,11 @@ export function subscribeToFirestoreData(
             window.dispatchEvent(new CustomEvent('qllh_accounts_updated', { detail: { accounts: finalAccounts } }));
           }
 
+          // Hợp nhất phân quyền học sinh
+          if (rawData.permissions && typeof rawData.permissions === 'object') {
+            localStorage.setItem('qllh_student_permissions', JSON.stringify(rawData.permissions));
+          }
+
           // Hợp nhất lớp học an toàn (KHÔNG BAO GIỜ XÓA MẤT LỚP MỚI TẠO CỦA USER KHI F5 HOẶC SNAPSHOT)
           let finalClasses = rawData.classes || [];
           if (Array.isArray(rawData.classes)) {
@@ -1036,6 +1045,64 @@ export function subscribeToFirestoreData(
 
           if (rawData.currentYear) {
             localStorage.setItem('qllh_current_year', rawData.currentYear);
+            localStorage.setItem(`qllh_user_${cleanId}_current_year`, rawData.currentYear);
+          }
+
+          // Đồng bộ Điểm số
+          if (rawData.grades && typeof rawData.grades === 'object') {
+            localStorage.setItem(`qllh_user_${cleanId}_grades`, JSON.stringify(rawData.grades));
+            localStorage.setItem('qllh_grade_v52', JSON.stringify(rawData.grades));
+            localStorage.setItem('qllh_grade', JSON.stringify(rawData.grades));
+          }
+
+          // Đồng bộ Thời khóa biểu
+          if (rawData.timetable && Array.isArray(rawData.timetable)) {
+            localStorage.setItem(`qllh_user_${cleanId}_timetable`, JSON.stringify(rawData.timetable));
+            localStorage.setItem(`qllh_timetable_${cleanId}`, JSON.stringify(rawData.timetable));
+            localStorage.setItem('qllh_timetable_matrix', JSON.stringify(rawData.timetable));
+          }
+
+          // Đồng bộ Tuần & Đánh giá
+          if (rawData.weeks && typeof rawData.weeks === 'object') {
+            localStorage.setItem(`qllh_user_${cleanId}_weeks`, JSON.stringify(rawData.weeks));
+            localStorage.setItem('qllh_weeks_v52', JSON.stringify(rawData.weeks));
+          }
+          if (rawData.evals && typeof rawData.evals === 'object') {
+            localStorage.setItem(`qllh_user_${cleanId}_evals`, JSON.stringify(rawData.evals));
+            localStorage.setItem('qllh_eval_v52', JSON.stringify(rawData.evals));
+          }
+
+          // Đồng bộ Năm học
+          if (rawData.years && Array.isArray(rawData.years)) {
+            localStorage.setItem(`qllh_user_${cleanId}_years`, JSON.stringify(rawData.years));
+            localStorage.setItem('qllh_years', JSON.stringify(rawData.years));
+          }
+
+          // Đồng bộ Nhận xét tùy chỉnh
+          if (rawData.commentsT && Array.isArray(rawData.commentsT)) {
+            localStorage.setItem(`qllh_user_${cleanId}_comments_t`, JSON.stringify(rawData.commentsT));
+            localStorage.setItem('qllh_custom_comments_t', JSON.stringify(rawData.commentsT));
+          }
+          if (rawData.commentsH && Array.isArray(rawData.commentsH)) {
+            localStorage.setItem(`qllh_user_${cleanId}_comments_h`, JSON.stringify(rawData.commentsH));
+            localStorage.setItem('qllh_custom_comments_h', JSON.stringify(rawData.commentsH));
+          }
+
+          // Đồng bộ Trắc nghiệm & Bài thi
+          if (rawData.quizBank && Array.isArray(rawData.quizBank)) {
+            localStorage.setItem('qllh_quiz_bank', JSON.stringify(rawData.quizBank));
+          }
+          if (rawData.submissions && Array.isArray(rawData.submissions)) {
+            localStorage.setItem('qllh_quiz_submissions', JSON.stringify(rawData.submissions));
+          }
+
+          // Đồng bộ Học liệu số & Cấu hình sắp xếp
+          if (rawData.resources && Array.isArray(rawData.resources)) {
+            localStorage.setItem('qllh_digital_resources', JSON.stringify(rawData.resources));
+          }
+          if (rawData.gradeSortType) {
+            localStorage.setItem(`qllh_user_${cleanId}_grade_sort`, rawData.gradeSortType);
+            localStorage.setItem('qllh_grade_sort_type', rawData.gradeSortType);
           }
 
           const safeData: AppSyncData = {

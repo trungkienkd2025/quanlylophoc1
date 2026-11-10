@@ -120,6 +120,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setPermissions((prev) => {
       const updated = { ...prev, [key]: !prev[key] };
       localStorage.setItem('qllh_student_permissions', JSON.stringify(updated));
+      pushAllDataToFirestore(currentUserId).catch(() => {});
       return updated;
     });
     setSaveToast(true);
@@ -134,6 +135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       );
       localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
       pushAccountsToFirestore(updated);
+      pushAllDataToFirestore(currentUserId, updated).catch(() => {});
       return updated;
     });
   };
@@ -149,6 +151,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const updated = prev.filter((acc) => acc.id !== id);
         localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
         pushAccountsToFirestore(updated);
+        pushAllDataToFirestore(currentUserId, updated).catch(() => {});
         deleteAccountFromFirestore(id).catch(() => {});
         return updated;
       });
@@ -200,6 +203,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
       pushAccountsToFirestore(updated);
+      pushAllDataToFirestore(currentUserId, updated).catch(() => {});
       return updated;
     });
 
@@ -236,6 +240,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const updated = [created, ...prev];
       localStorage.setItem('qllh_user_accounts', JSON.stringify(updated));
       pushAccountsToFirestore(updated);
+      pushAllDataToFirestore(currentUserId, updated).catch(() => {});
       return updated;
     });
 

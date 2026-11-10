@@ -69,6 +69,28 @@ export const QuizBank: React.FC<QuizBankProps> = ({ quizzes, setQuizzes, isAdmin
     localStorage.setItem('qllh_quiz_submissions', JSON.stringify(submissions));
   }, [submissions]);
 
+  // Lắng nghe dữ liệu bài nộp từ đám mây khi có học sinh làm bài hoặc máy khác cập nhật
+  useEffect(() => {
+    const handleGlobalDataSync = (e: any) => {
+      const d = e?.detail?.data;
+      if (d?.submissions && Array.isArray(d.submissions)) {
+        setSubmissions((prev) => (JSON.stringify(prev) === JSON.stringify(d.submissions) ? prev : d.submissions));
+      } else {
+        try {
+          const raw = localStorage.getItem('qllh_quiz_submissions');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              setSubmissions((prev) => (JSON.stringify(prev) === JSON.stringify(parsed) ? prev : parsed));
+            }
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('qllh_data_updated', handleGlobalDataSync);
+    return () => window.removeEventListener('qllh_data_updated', handleGlobalDataSync);
+  }, []);
+
   // Scores filter state
   const [scoreGradeFilter, setScoreGradeFilter] = useState<number | 'all'>('all');
   const [scoreClassFilter, setScoreClassFilter] = useState<string>('all');
@@ -176,7 +198,10 @@ export const QuizBank: React.FC<QuizBankProps> = ({ quizzes, setQuizzes, isAdmin
       explanation: newExplanation.trim() || 'Chúc mừng các em đã trả lời chính xác!'
     };
 
-    setQuizzes((prev) => [created, ...prev]);
+    const updated = [created, ...quizzes];
+    setQuizzes(updated);
+    localStorage.setItem('qllh_quiz_bank', JSON.stringify(updated));
+    pushAllDataToFirestore().catch(() => {});
     setShowAddModal(false);
     setNewQuestion('');
     setNewOptions(['', '', '', '']);
@@ -186,7 +211,10 @@ export const QuizBank: React.FC<QuizBankProps> = ({ quizzes, setQuizzes, isAdmin
 
   const handleDeleteQuestion = (id: string) => {
     if (confirm('Thầy có chắc chắn muốn xóa câu hỏi này không?')) {
-      setQuizzes((prev) => prev.filter((q) => q.id !== id));
+      const updated = quizzes.filter((q) => q.id !== id);
+      setQuizzes(updated);
+      localStorage.setItem('qllh_quiz_bank', JSON.stringify(updated));
+      pushAllDataToFirestore().catch(() => {});
       soundManager.playTick();
     }
   };
@@ -194,7 +222,10 @@ export const QuizBank: React.FC<QuizBankProps> = ({ quizzes, setQuizzes, isAdmin
   // Delete a student's submission record
   const handleDeleteSubmission = (subId: string) => {
     if (confirm('Thầy có chắc chắn muốn xóa kết quả bài thi này của học sinh?')) {
-      setSubmissions((prev) => prev.filter((s) => s.id !== subId));
+      const updated = submissions.filter((s) => s.id !== subId);
+      setSubmissions(updated);
+      localStorage.setItem('qllh_quiz_submissions', JSON.stringify(updated));
+      pushAllDataToFirestore().catch(() => {});
       soundManager.playTick();
     }
   };

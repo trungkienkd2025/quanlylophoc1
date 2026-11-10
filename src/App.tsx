@@ -45,7 +45,7 @@ import {
   pushAccountsToFirestore,
 } from './firebase';
 import { getUserScopeId } from './utils/userScope';
-import { getSavedClasses, getSavedStudents, getSavedCurrentYear } from './utils/dbStorage';
+import { getSavedClasses, getSavedStudents, getSavedCurrentYear, debounceCloudSync } from './utils/dbStorage';
 
 export default function App() {
   // Main view mode: 'portal' (Image 1 & Image 2) or 'teacher' (Teacher management workspace)
@@ -217,6 +217,12 @@ export default function App() {
             if (cloudData.currentYear) {
               setSelectedYear(cloudData.currentYear);
             }
+            if (cloudData.quizBank && Array.isArray(cloudData.quizBank) && cloudData.quizBank.length > 0) {
+              setQuizzes(cloudData.quizBank);
+            }
+            if (cloudData.resources && Array.isArray(cloudData.resources) && cloudData.resources.length > 0) {
+              setResources(cloudData.resources);
+            }
           } else {
             pushAllDataToFirestore(scope, accounts).catch(() => {});
           }
@@ -272,6 +278,12 @@ export default function App() {
           }
           if (updated.currentYear) {
             setSelectedYear(updated.currentYear);
+          }
+          if (updated.quizBank && Array.isArray(updated.quizBank) && updated.quizBank.length > 0) {
+            setQuizzes(updated.quizBank);
+          }
+          if (updated.resources && Array.isArray(updated.resources) && updated.resources.length > 0) {
+            setResources(updated.resources);
           }
         }
       }, scope);
@@ -364,6 +376,12 @@ export default function App() {
               notes: s.note,
             }))
           );
+        }
+        if (data.quizBank && Array.isArray(data.quizBank) && data.quizBank.length > 0) {
+          setQuizzes(data.quizBank);
+        }
+        if (data.resources && Array.isArray(data.resources) && data.resources.length > 0) {
+          setResources(data.resources);
         }
         window.dispatchEvent(new CustomEvent('qllh_data_updated', { detail: { source: 'manual_sync', data } }));
       }
@@ -486,9 +504,44 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('qllh_quiz_bank', JSON.stringify(quizzes));
+    debounceCloudSync(currentUser);
   }, [quizzes]);
 
-  const [resources, setResources] = useState<DigitalResource[]>(INITIAL_RESOURCES);
+  const [resources, setResources] = useState<DigitalResource[]>(() => {
+    try {
+      const saved = localStorage.getItem('qllh_digital_resources');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_RESOURCES;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('qllh_digital_resources', JSON.stringify(resources));
+    debounceCloudSync(currentUser);
+  }, [resources]);
+
+  // Lắng nghe cập nhật trắc nghiệm, học liệu số, phân quyền từ các component con và đám mây
+  useEffect(() => {
+    const handleGlobalDataSync = (e: any) => {
+      const d = e?.detail?.data;
+      if (d) {
+        if (d.quizBank && Array.isArray(d.quizBank) && d.quizBank.length > 0) {
+          setQuizzes((prev) => (JSON.stringify(prev) === JSON.stringify(d.quizBank) ? prev : d.quizBank));
+        }
+        if (d.resources && Array.isArray(d.resources) && d.resources.length > 0) {
+          setResources((prev) => (JSON.stringify(prev) === JSON.stringify(d.resources) ? prev : d.resources));
+        }
+        if (d.permissions) {
+          setPermissions((prev) => (JSON.stringify(prev) === JSON.stringify(d.permissions) ? prev : d.permissions));
+        }
+      }
+    };
+    window.addEventListener('qllh_data_updated', handleGlobalDataSync);
+    return () => window.removeEventListener('qllh_data_updated', handleGlobalDataSync);
+  }, []);
 
   // Modals
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);

@@ -624,6 +624,7 @@ export function saveCustomCommentsPermanently(
     const legacyKey = type === 'T' ? 'qllh_custom_comments_t' : 'qllh_custom_comments_h';
     localStorage.setItem(legacyKey, jsonStr);
   }
+  debounceCloudSync(userId);
 }
 
 /**
@@ -639,6 +640,7 @@ export function saveGradeSortTypePermanently(
   if (userId === 'u_admin' || userId === 'trungkienkd2025') {
     localStorage.setItem(LEGACY_STORAGE_KEYS.GRADE_SORT, sortType);
   }
+  debounceCloudSync(userId);
 }
 
 /**

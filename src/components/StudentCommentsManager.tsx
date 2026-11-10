@@ -181,6 +181,14 @@ export const StudentCommentsManager: React.FC<StudentCommentsManagerProps> = ({
         setGradeData(getSavedGrades(currentUser));
         const savedSort = getSavedGradeSortType(currentUser);
         setSortOrder(savedSort);
+        const commT = getSavedCustomComments(currentUser, 'T');
+        if (commT && commT.length > 0) {
+          setCommentsT((prev) => (JSON.stringify(prev) === JSON.stringify(commT) ? prev : commT));
+        }
+        const commH = getSavedCustomComments(currentUser, 'H');
+        if (commH && commH.length > 0) {
+          setCommentsH((prev) => (JSON.stringify(prev) === JSON.stringify(commH) ? prev : commH));
+        }
       } catch {}
     };
 
