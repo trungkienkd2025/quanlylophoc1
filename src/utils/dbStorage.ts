@@ -71,19 +71,39 @@ const LEGACY_STORAGE_KEYS = {
 
 // Dữ liệu lớp mẫu mặc định cho Quản trị viên chính (u_admin)
 const DEFAULT_ADMIN_CLASSES = [
+  // Khối 1
   { id: 'c1', year: '2026-2027', name: '1/1 (ĐIỆP)', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c_1794239990637', year: '2026-2027', name: '1/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c_1794240001067', year: '2026-2027', name: '1/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c_1794240007860', year: '2026-2027', name: '1/4', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
   { id: 'c_1794240020924', year: '2026-2027', name: '1/5', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  // Khối 2
   { id: 'c3', year: '2026-2027', name: '2/1 (ĐĂNG)', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1794240029212', year: '2026-2027', name: '2/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1794240034468', year: '2026-2027', name: '2/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1794240039396', year: '2026-2027', name: '2/4', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240029212', year: '2026-2027', name: '2/2', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240034468', year: '2026-2027', name: '2/3', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240039396', year: '2026-2027', name: '2/4', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270618473', year: '2026-2027', name: '2/5', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  // Khối 3
   { id: 'c2', year: '2026-2027', name: '3/1 (ANH)', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1794240048892', year: '2026-2027', name: '3/2', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
-  { id: 'c_1794240058892', year: '2026-2027', name: '3/3', grade: 'Khối 1', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240048892', year: '2026-2027', name: '3/2', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794240107153', year: '2026-2027', name: '3/3', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794241248168', year: '2026-2027', name: '3/4', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270755983', year: '2026-2027', name: '3/5', grade: 'Khối 3', bg: 'bg-amber-50 border-amber-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  // Khối 4
+  { id: 'c_1794241343007', year: '2026-2027', name: '4/1', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270902201', year: '2026-2027', name: '4/2', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270910160', year: '2026-2027', name: '4/3', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270917144', year: '2026-2027', name: '4/4', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794270925313', year: '2026-2027', name: '4/5', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  // Khối 5
+  { id: 'c_1794293518961', year: '2026-2027', name: '5/1', grade: 'Khối 5', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794293525991', year: '2026-2027', name: '5/2', grade: 'Khối 5', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794293536583', year: '2026-2027', name: '5/3', grade: 'Khối 5', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794293543833', year: '2026-2027', name: '5/4', grade: 'Khối 5', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794293551200', year: '2026-2027', name: '5/5', grade: 'Khối 5', bg: 'bg-indigo-50 border-indigo-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  // Năm cũ
   { id: 'c4', year: '2025-2026', name: '4/1 (HOÀNG)', grade: 'Khối 4', bg: 'bg-teal-50 border-teal-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
+  { id: 'c_1794212483423', year: '2025-2026', name: '2/2', grade: 'Khối 2', bg: 'bg-blue-50 border-blue-200', createdBy: 'u_admin', createdByName: 'Thầy Trần Trung Kiên' },
 ];
 
 /**
@@ -121,7 +141,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
   const deduplicateList = (items: any[]) => {
     if (!Array.isArray(items)) return [];
     const map = new Map<string, any>();
-    items.filter((c) => !isClassDeleted(c)).forEach((c) => {
+    items.forEach((c) => {
       if (!c || !c.name) return;
       const k = (c.name || '').trim().toLowerCase() + '__' + (c.year || '2026-2027').trim();
       if (!map.has(k)) {
@@ -139,7 +159,7 @@ export function getSavedClasses(user?: UserAccount | string | null): any[] {
     const userClassesJson = localStorage.getItem(keys.CLASSES);
     if (userClassesJson) {
       const parsed = JSON.parse(userClassesJson);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         const valid = deduplicateList(parsed);
         return valid;
       }
@@ -661,11 +681,33 @@ export function updateVault(partial: Partial<SystemBackupData>, user?: UserAccou
 }
 
 let syncTimeout: any = null;
+let pendingSyncUserId: string | null = null;
+
 /**
- * Tự động đồng bộ lên Firebase Firestore theo từng tài khoản (debounced 3s)
+ * Đẩy ngay lập tức bất kỳ thay đổi nào đang chờ đồng bộ
+ */
+export function flushPendingCloudSync() {
+  if (syncTimeout) {
+    clearTimeout(syncTimeout);
+    syncTimeout = null;
+    const uid = pendingSyncUserId || 'u_admin';
+    try {
+      pushAllDataToFirestore(uid).catch(() => {});
+    } catch {}
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', flushPendingCloudSync);
+  window.addEventListener('pagehide', flushPendingCloudSync);
+}
+
+/**
+ * Tự động đồng bộ lên Firebase Firestore theo từng tài khoản (siêu tốc 200ms, không độ trễ)
  */
 export function debounceCloudSync(user?: UserAccount | string | null) {
   const userId = getUserScopeId(user);
+  pendingSyncUserId = userId;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(async () => {
     try {
@@ -679,8 +721,10 @@ export function debounceCloudSync(user?: UserAccount | string | null) {
       }
     } catch (e) {
       console.warn('Auto cloud sync notice:', e);
+    } finally {
+      syncTimeout = null;
     }
-  }, 3000);
+  }, 200);
 }
 
 /**

@@ -155,21 +155,28 @@ export default function App() {
   // Automatic Cloud Sync via Firebase Firestore - CSDL THỐNG NHẤT TRÊN TẤT CẢ MÁY TÍNH
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [isInitialHydrating, setIsInitialHydrating] = useState(true);
 
   useEffect(() => {
     const { db } = initFirebase();
+    const scope = getUserScopeId(currentUser);
+
+    // Bắt đầu quá trình đồng bộ khởi tạo khi mở web
+    setIsInitialHydrating(true);
+    setIsSyncingCloud(true);
+
+    // Timeout an toàn tối đa 800ms để không bao giờ làm đơ giao diện nếu mạng chậm
+    const safetyTimer = setTimeout(() => {
+      setIsInitialHydrating(false);
+      setIsSyncingCloud(false);
+    }, 800);
+
     if (db) {
       setIsCloudConnected(true);
-      const scope = getUserScopeId(currentUser);
-
-      setIsSyncingCloud(true);
-      const initialMountTimer = setTimeout(() => {
-        setIsSyncingCloud(false);
-      }, 1000);
 
       fetchAllDataFromFirestore(scope)
         .then((cloudData) => {
-          clearTimeout(initialMountTimer);
+          clearTimeout(safetyTimer);
           setIsSyncingCloud(false);
           if (cloudData) {
             if (cloudData.accounts && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
@@ -213,10 +220,16 @@ export default function App() {
           } else {
             pushAllDataToFirestore(scope, accounts).catch(() => {});
           }
+          // Bắn sự kiện cập nhật để toàn bộ component (ClassroomManager...) nạp dữ liệu mới nhất
+          window.dispatchEvent(
+            new CustomEvent('qllh_data_updated', { detail: { source: 'initial_mount_sync', data: cloudData } })
+          );
+          setIsInitialHydrating(false);
         })
         .catch(() => {
-          clearTimeout(initialMountTimer);
+          clearTimeout(safetyTimer);
           setIsSyncingCloud(false);
+          setIsInitialHydrating(false);
         });
 
       // Lắng nghe dữ liệu thời gian thực từ Firestore từ tất cả các máy tính khác
@@ -263,9 +276,32 @@ export default function App() {
         }
       }, scope);
 
-      return () => {
-        if (unsubscribe) unsubscribe();
+      // Tự động đồng bộ dữ liệu mới nhất khi người dùng chuyển sang tab này hoặc mở lại cửa sổ
+      const handleTabActive = () => {
+        if (document.visibilityState === 'visible') {
+          fetchAllDataFromFirestore(scope)
+            .then((data) => {
+              if (data) {
+                window.dispatchEvent(
+                  new CustomEvent('qllh_data_updated', { detail: { source: 'tab_focus_sync', data } })
+                );
+              }
+            })
+            .catch(() => {});
+        }
       };
+      document.addEventListener('visibilitychange', handleTabActive);
+      window.addEventListener('focus', handleTabActive);
+
+      return () => {
+        clearTimeout(safetyTimer);
+        if (unsubscribe) unsubscribe();
+        document.removeEventListener('visibilitychange', handleTabActive);
+        window.removeEventListener('focus', handleTabActive);
+      };
+    } else {
+      setIsInitialHydrating(false);
+      setIsSyncingCloud(false);
     }
   }, [currentUser?.id, currentUser?.username]);
 
@@ -285,10 +321,10 @@ export default function App() {
 
     try {
       const scope = getUserScopeId(currentUser);
-      // 1. Tải dữ liệu mới nhất từ Firestore trước để nhận lệnh xóa/sửa từ máy khác
-      const cloudData = await fetchAllDataFromFirestore(scope);
-      const data = cloudData || (await pushAllDataToFirestoreEx(scope, accounts)).data;
+      // Hai chiều: đẩy dữ liệu hiện tại lên hợp nhất với Firestore và nhận về dữ liệu đầy đủ nhất
+      const pushRes = await pushAllDataToFirestoreEx(scope, accounts);
       clearTimeout(safetyTimer);
+      const data = pushRes.data;
 
       if (data) {
         if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
@@ -636,6 +672,29 @@ export default function App() {
     setIsLoginModalOpen(true);
     setIsMobileSidebarOpen(false);
   };
+
+  // Màn hình tải đồng bộ CSDL đám mây siêu tốc khi vừa mở trang web (ngăn chặn chớp dữ liệu cũ)
+  if (isInitialHydrating) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col items-center justify-center p-6 antialiased">
+        <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl border border-blue-100 flex flex-col items-center max-w-sm w-full text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 mb-4 animate-bounce">
+            <RefreshCw className="w-8 h-8 animate-spin" />
+          </div>
+          <h2 className="text-xl font-black text-slate-800 tracking-tight mb-1">QLLH.Pro</h2>
+          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full mb-3 inline-block">
+            Đồng bộ CSDL Đám mây
+          </span>
+          <p className="text-xs text-slate-500 leading-relaxed font-medium">
+            Đang tự động tải dữ liệu lớp học mới nhất từ đám mây Firestore để đồng nhất mọi máy tính...
+          </p>
+          <div className="w-full bg-slate-100 h-2 rounded-full mt-5 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 via-indigo-600 to-sky-500 h-full rounded-full animate-pulse w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If in Portal mode (Landing Image 1 / Student Hub Image 2)
   if (viewMode === 'portal') {

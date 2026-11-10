@@ -294,6 +294,26 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       if (grd) {
         setGradeData((prev) => (JSON.stringify(prev) === JSON.stringify(grd) ? prev : grd));
       }
+      const yrs = getSavedYears(currentUser);
+      if (yrs) {
+        setYearsData((prev) => (JSON.stringify(prev) === JSON.stringify(yrs) ? prev : yrs));
+      }
+      const cy = getSavedCurrentYear(currentUser);
+      if (cy) {
+        setCurrentYear(cy);
+      }
+      const wks = getSavedWeeks(currentUser);
+      if (wks) {
+        setWeeksData((prev) => (JSON.stringify(prev) === JSON.stringify(wks) ? prev : wks));
+      }
+      const evl = getSavedEvals(currentUser);
+      if (evl) {
+        setEvalData((prev) => (JSON.stringify(prev) === JSON.stringify(evl) ? prev : evl));
+      }
+      const tt = getSavedTimetable(currentUser);
+      if (tt) {
+        setTimetable((prev) => (JSON.stringify(prev) === JSON.stringify(tt) ? prev : tt));
+      }
     };
     window.addEventListener('qllh_data_updated', handleGlobalSync);
     return () => window.removeEventListener('qllh_data_updated', handleGlobalSync);
@@ -829,6 +849,7 @@ export const ClassroomManager: React.FC<ClassroomManagerProps> = ({
       }
     }
     setShowStudentModal(false);
+    pushAllDataToFirestore(getUserScopeId(currentUser)).catch(() => {});
   };
 
   // Action: Delete Single Student

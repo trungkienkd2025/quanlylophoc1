@@ -214,49 +214,43 @@ export function mergeClassesSafely(
     serverDeletedKeys.forEach((key) => key && deletedKeys.add(key.toLowerCase().trim()));
   }
 
-  // Lưu lại vào localStorage của máy hiện tại để không bao giờ khôi phục nhầm
-  try {
-    localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(Array.from(deletedIds)));
-    localStorage.setItem('qllh_deleted_class_keys', JSON.stringify(Array.from(deletedKeys)));
-  } catch {}
-
-  const isClassDeleted = (c: any) => {
-    if (!c) return true;
-    if (c.id && deletedIds.has(c.id)) return true;
-    const normName = (c.name || '').trim().toLowerCase();
-    const normYear = (c.year || '2026-2027').trim();
-    const logicKey = `${normName}__${normYear}`;
-    if (deletedKeys.has(logicKey)) return true;
-    return false;
-  };
-
-  // 2. Lọc bỏ các lớp đã bị chủ động xóa trên bất kỳ máy nào
-  const validServer = (serverClasses || []).filter((c) => c && c.id && !isClassDeleted(c));
-  const validLocal = (localClasses || []).filter((c) => c && c.id && !isClassDeleted(c));
-
-  // 3. Khử trùng lặp đa tầng: theo Logic Key (Tên lớp chuẩn hóa + Năm học)
+  // 1. NẠP TOÀN BỘ LỚP TỪ SERVER (Server là nguồn cơ sở dữ liệu gốc)
   const map = new Map<string, any>();
-
-  // Nạp từ server trước (server là cơ sở dữ liệu gốc)
-  validServer.forEach((c) => {
+  (serverClasses || []).forEach((c) => {
+    if (!c || !c.name) return;
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
     const logicKey = `${normName}__${normYear}`;
     map.set(logicKey, c);
+
+    // Vì lớp này đang có mặt trên Server, giải phóng mọi cờ xóa cũ đối với lớp này!
+    deletedKeys.delete(logicKey);
+    if (c.id) deletedIds.delete(c.id);
   });
 
-  // Hợp nhất từ local: chỉ thêm lớp nếu lớp chưa bị xóa
-  validLocal.forEach((c) => {
+  // 2. HỢP NHẤT TỪ LOCAL:
+  // Nếu máy này có lớp (ví dụ Máy 1 có 25 lớp), giữ lại và bổ sung
+  const isServerTombstone = (logicKey: string, id?: string) => {
+    if (Array.isArray(serverDeletedKeys) && serverDeletedKeys.includes(logicKey)) return true;
+    if (id && Array.isArray(serverDeletedIds) && serverDeletedIds.includes(id)) return true;
+    return false;
+  };
+
+  localClasses.forEach((c) => {
+    if (!c || !c.name) return;
     const normName = (c.name || '').trim().toLowerCase();
     const normYear = (c.year || '2026-2027').trim();
     const logicKey = `${normName}__${normYear}`;
 
-    if (deletedKeys.has(logicKey) || (c.id && deletedIds.has(c.id))) {
+    // Nếu lớp này bị đánh dấu xóa trên Server và server không có, bỏ qua
+    if (isServerTombstone(logicKey, c.id)) {
       return;
     }
 
     if (!map.has(logicKey)) {
       map.set(logicKey, c);
+      deletedKeys.delete(logicKey);
+      if (c.id) deletedIds.delete(c.id);
     } else {
       const existing = map.get(logicKey);
       const preferredId = (c.id && c.id.startsWith('c_17') && !existing.id.startsWith('c_17'))
@@ -275,6 +269,8 @@ export function mergeClassesSafely(
 
   // Cập nhật ngay vào localStorage của máy hiện tại
   try {
+    localStorage.setItem('qllh_deleted_class_ids', JSON.stringify(Array.from(deletedIds)));
+    localStorage.setItem('qllh_deleted_class_keys', JSON.stringify(Array.from(deletedKeys)));
     localStorage.setItem(userClassesKey, JSON.stringify(merged));
     localStorage.setItem('qllh_classes_v52', JSON.stringify(merged));
     localStorage.setItem('qllh_classes', JSON.stringify(merged));
