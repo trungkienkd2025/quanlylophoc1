@@ -38,7 +38,21 @@ export const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({
   isAdmin = true,
   currentUser,
 }) => {
-  const [activeTab, setActiveTab] = useState<'timer' | 'excel' | 'teams' | 'comments'>('comments');
+  const [activeTab, setActiveTab] = useState<'comments' | 'timer' | 'teams' | 'excel'>(() => {
+    try {
+      const saved = localStorage.getItem('qllh_utilities_subtab');
+      if (saved === 'comments' || saved === 'timer' || saved === 'teams' || saved === 'excel') {
+        return saved;
+      }
+    } catch {}
+    return 'comments';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('qllh_utilities_subtab', activeTab);
+    } catch {}
+  }, [activeTab]);
 
   // Countdown timer state
   const [timerSeconds, setTimerSeconds] = useState(300); // 5 mins default
@@ -192,24 +206,40 @@ export const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#0070F3] bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
               Hộp công cụ tiện ích
             </span>
             <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-500">Hỗ trợ giảng dạy trên lớp</span>
+            <span className="text-xs text-slate-500 font-medium">Hỗ trợ giảng dạy & Đánh giá</span>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mt-1">Tiện ích giảng dạy</h2>
+          <h2 className="text-2xl font-black text-slate-900 mt-1">Tiện ích giảng dạy</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Đồng hồ đếm ngược trình chiếu, bốc thăm chia nhóm và nhập danh sách học sinh Excel
+            Thẻ nhận xét học sinh tự động (Excel), đồng hồ đếm ngược, bốc thăm chia nhóm và nhập học sinh
           </p>
         </div>
 
-        {/* Tab switchers */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+        {/* Tab switchers - Thẻ Nhận xét (Excel) placed first and prominent */}
+        <div className="flex items-center flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'comments'
+                ? 'bg-white text-[#0070F3] shadow-sm ring-2 ring-blue-100'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <Award className="w-4 h-4 text-[#0070F3]" />
+            <span>Thẻ Nhận xét (Excel)</span>
+            <span className="text-[10px] bg-blue-100 text-[#0070F3] px-1.5 py-0.5 rounded-full font-black">
+              Tự động
+            </span>
+          </button>
           <button
             onClick={() => setActiveTab('timer')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === 'timer' ? 'bg-white text-rose-600 shadow-2xs' : 'text-slate-600'
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'timer'
+                ? 'bg-white text-rose-600 shadow-sm ring-2 ring-rose-100'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
@@ -217,27 +247,22 @@ export const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('teams')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === 'teams' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-600'
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'teams'
+                ? 'bg-white text-blue-600 shadow-sm ring-2 ring-blue-100'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <Users2 className="w-3.5 h-3.5" />
             <span>Chia nhóm học tập</span>
           </button>
-          <button
-            onClick={() => setActiveTab('comments')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === 'comments' ? 'bg-white text-indigo-600 shadow-2xs font-bold' : 'text-slate-600'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>Nhận xét học sinh (Excel)</span>
-          </button>
           {isAdmin && (
             <button
               onClick={() => setActiveTab('excel')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'excel' ? 'bg-white text-emerald-600 shadow-2xs' : 'text-slate-600'
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'excel'
+                  ? 'bg-white text-emerald-600 shadow-sm ring-2 ring-emerald-100'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />

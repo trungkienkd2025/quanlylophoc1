@@ -83,6 +83,7 @@ export const sortStudentsLikeGradeTab = (
 // Built-in pedagogical comments for Tin học per Grade (Khối 1 -> Khối 5)
 const DEFAULT_GRADE_COMMENTS_T: Record<string, string[]> = {
   '1': [
+    'Em học giỏi, tiếp thu bài nhanh và thực hành tốt.',
     'Em chăm ngoan, làm quen với máy tính nhanh và thao tác chuột khéo léo.',
     'Em thực hành tốt các bài tập sử dụng chuột và nhận biết các bộ phận máy tính.',
     'Biết cách cầm chuột đúng cách, nhấp chuột và kéo thả chính xác.',
@@ -136,6 +137,7 @@ const DEFAULT_GRADE_COMMENTS_T: Record<string, string[]> = {
 
 const DEFAULT_GRADE_COMMENTS_H: Record<string, string[]> = {
   '1': [
+    'Em hoàn thành các nội dung bài học theo yêu cầu.',
     'Em hoàn thành nội dung làm quen với máy tính theo yêu cầu.',
     'Đã biết cách cầm chuột và nhấp chuột, cần rèn thêm kỹ năng kéo thả.',
     'Nhận biết được các bộ phận cơ bản của máy tính, chăm chú nghe giảng.',
