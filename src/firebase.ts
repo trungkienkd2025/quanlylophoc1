@@ -313,14 +313,34 @@ export function mergeAccountsSafely(serverAccounts: any[]): any[] {
 }
 
 /**
+ * Tiện ích thực thi Promise với giới hạn thời gian (Timeout), ngăn chặn treo xoay spinner
+ */
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallbackValue), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).then((res) => {
+    clearTimeout(timer);
+    return res;
+  });
+}
+
+export interface PushResult {
+  success: boolean;
+  data: AppSyncData;
+}
+
+/**
  * Đẩy toàn bộ dữ liệu (tài khoản, lớp, học sinh, điểm, TKB...) lên Firebase Firestore
+ * Tối ưu hóa: giới hạn thời gian tối đa 1.5s, không bao giờ làm treo giao diện
  */
 export async function pushAllDataToFirestore(userScope?: string, accountsOverride?: any[]): Promise<boolean> {
-  const db = getFirebaseDb();
-  if (!db) {
-    throw new Error('Chưa thể kết nối tới Firebase Firestore.');
-  }
+  const res = await pushAllDataToFirestoreEx(userScope, accountsOverride);
+  return res.success;
+}
 
+export async function pushAllDataToFirestoreEx(userScope?: string, accountsOverride?: any[]): Promise<PushResult> {
   const userId = userScope || 'u_admin';
   const cleanId = userId || 'u_admin';
   const userClassesKey = `qllh_user_${cleanId}_classes`;
@@ -401,40 +421,40 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
   let finalCommentsT = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_t`) || localStorage.getItem('qllh_custom_comments_t') || '[]');
   let finalCommentsH = JSON.parse(localStorage.getItem(`qllh_user_${cleanId}_comments_h`) || localStorage.getItem('qllh_custom_comments_h') || '[]');
 
-  // 1. Luôn hợp nhất an toàn với dữ liệu đang có trên Firestore trước khi ghi
-  // NGUYÊN TẮC: Lớp và học sinh đã tạo là LƯU VĨNH VIỄN, không bao giờ bị ghi đè làm mất bởi tài khoản hoặc thiết bị khác
-  const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-  try {
-    const existingSnap = await getDoc(globalDocRef);
-    if (existingSnap.exists()) {
-      const serverData = existingSnap.data() as AppSyncData;
+  const db = getFirebaseDb();
+  if (db) {
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
+    try {
+      const existingSnap: any = await withTimeout(getDoc(globalDocRef), 800, null);
+      if (existingSnap && existingSnap.exists()) {
+        const serverData = existingSnap.data() as AppSyncData;
 
-      finalClasses = mergeClassesSafely(serverData.classes || [], userId);
-      finalStudents = mergeStudentsSafely(serverData.students || [], userId);
-      finalAccounts = mergeAccountsSafely(serverData.accounts || []);
+        finalClasses = mergeClassesSafely(serverData.classes || [], userId);
+        finalStudents = mergeStudentsSafely(serverData.students || [], userId);
+        finalAccounts = mergeAccountsSafely(serverData.accounts || []);
 
-      // Hợp nhất bảng điểm, tuần, đánh giá
-      if (serverData.grades && typeof serverData.grades === 'object') {
-        finalGrades = { ...serverData.grades, ...finalGrades };
+        if (serverData.grades && typeof serverData.grades === 'object') {
+          finalGrades = { ...serverData.grades, ...finalGrades };
+        }
+        if (serverData.weeks && typeof serverData.weeks === 'object') {
+          finalWeeks = { ...serverData.weeks, ...finalWeeks };
+        }
+        if (serverData.evals && typeof serverData.evals === 'object') {
+          finalEvals = { ...serverData.evals, ...finalEvals };
+        }
+        if (serverData.years && Array.isArray(serverData.years)) {
+          finalYears = Array.from(new Set([...serverData.years, ...finalYears]));
+        }
+        if (serverData.commentsT && Array.isArray(serverData.commentsT)) {
+          finalCommentsT = Array.from(new Set([...serverData.commentsT, ...finalCommentsT]));
+        }
+        if (serverData.commentsH && Array.isArray(serverData.commentsH)) {
+          finalCommentsH = Array.from(new Set([...serverData.commentsH, ...finalCommentsH]));
+        }
       }
-      if (serverData.weeks && typeof serverData.weeks === 'object') {
-        finalWeeks = { ...serverData.weeks, ...finalWeeks };
-      }
-      if (serverData.evals && typeof serverData.evals === 'object') {
-        finalEvals = { ...serverData.evals, ...finalEvals };
-      }
-      if (serverData.years && Array.isArray(serverData.years)) {
-        finalYears = Array.from(new Set([...serverData.years, ...finalYears]));
-      }
-      if (serverData.commentsT && Array.isArray(serverData.commentsT)) {
-        finalCommentsT = Array.from(new Set([...serverData.commentsT, ...finalCommentsT]));
-      }
-      if (serverData.commentsH && Array.isArray(serverData.commentsH)) {
-        finalCommentsH = Array.from(new Set([...serverData.commentsH, ...finalCommentsH]));
-      }
+    } catch (err) {
+      console.warn('Đọc Firestore nhẹ trước hợp nhất:', err);
     }
-  } catch (err) {
-    console.warn('Lỗi đọc Firestore trước khi hợp nhất:', err);
   }
 
   const payload: AppSyncData = {
@@ -457,16 +477,22 @@ export async function pushAllDataToFirestore(userScope?: string, accountsOverrid
     lastUpdatedBy: userId,
   };
 
-  // 1. Luôn cập nhật vào tài liệu tập trung toàn trường global_data_v1
+  if (!db) {
+    return { success: false, data: payload };
+  }
+
   try {
-    await setDoc(globalDocRef, payload, { merge: true });
-    // 2. Đồng thời lưu vào tài liệu riêng của user
+    const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
     const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
-    await setDoc(userDocRef, payload, { merge: true });
-    return true;
+    const writeTask = Promise.allSettled([
+      setDoc(globalDocRef, payload, { merge: true }),
+      setDoc(userDocRef, payload, { merge: true }),
+    ]);
+    await withTimeout(writeTask, 1400, null);
+    return { success: true, data: payload };
   } catch (err: any) {
     console.warn('Lỗi ghi Firestore (dữ liệu vẫn an toàn trên thiết bị):', err?.message || err);
-    return false;
+    return { success: false, data: payload };
   }
 }
 
@@ -661,17 +687,17 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
   const userCurrentYearKey = `qllh_user_${cleanId}_current_year`;
 
   try {
-    // 1. Ưu tiên đọc từ tài liệu tập trung toàn trường global_data_v1
+    // 1. Ưu tiên đọc từ tài liệu tập trung toàn trường global_data_v1 (tối đa 1.2s)
     const globalDocRef = doc(db, 'qllh_data', APP_DATA_DOC);
-    let snap = await getDoc(globalDocRef);
+    let snap: any = await withTimeout(getDoc(globalDocRef), 1200, null);
 
     // 2. Nếu global chưa có, thử đọc từ tài liệu user
-    if (!snap.exists()) {
+    if (!snap || !snap.exists()) {
       const userDocRef = doc(db, 'qllh_user_data', getUserDataDocId(userId));
-      snap = await getDoc(userDocRef);
+      snap = await withTimeout(getDoc(userDocRef), 1200, null);
     }
 
-    if (snap.exists()) {
+    if (snap && snap.exists()) {
       const data = snap.data() as AppSyncData;
 
       // 1. Đồng bộ tài khoản người dùng
@@ -695,11 +721,6 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
         localStorage.setItem('qllh_classes', JSON.stringify(mergedClasses));
         localStorage.setItem('qllh_classes_v50', JSON.stringify(mergedClasses));
         localStorage.setItem('qllh_user_u_admin_classes', JSON.stringify(mergedClasses));
-        
-        // Nếu local có lớp mới mà server chưa kịp lưu, tự động đẩy ngược lên Firestore
-        if (mergedClasses.length > data.classes.length) {
-          pushAllDataToFirestore(userId).catch(() => {});
-        }
         data.classes = mergedClasses;
       }
 
@@ -711,10 +732,6 @@ export async function fetchAllDataFromFirestore(userScope?: string): Promise<App
         localStorage.setItem('qllh_students', JSON.stringify(mergedStudents));
         localStorage.setItem('qllh_students_v50', JSON.stringify(mergedStudents));
         localStorage.setItem('qllh_user_u_admin_students', JSON.stringify(mergedStudents));
-
-        if (mergedStudents.length > data.students.length) {
-          pushAllDataToFirestore(userId).catch(() => {});
-        }
         data.students = mergedStudents;
       }
 

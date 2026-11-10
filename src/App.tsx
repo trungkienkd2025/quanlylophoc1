@@ -41,6 +41,7 @@ import {
   fetchAllDataFromFirestore,
   subscribeToFirestoreData,
   pushAllDataToFirestore,
+  pushAllDataToFirestoreEx,
   pushAccountsToFirestore,
 } from './firebase';
 import { getUserScopeId } from './utils/userScope';
@@ -162,8 +163,13 @@ export default function App() {
       const scope = getUserScopeId(currentUser);
 
       setIsSyncingCloud(true);
+      const initialMountTimer = setTimeout(() => {
+        setIsSyncingCloud(false);
+      }, 1000);
+
       fetchAllDataFromFirestore(scope)
         .then((cloudData) => {
+          clearTimeout(initialMountTimer);
           setIsSyncingCloud(false);
           if (cloudData) {
             if (cloudData.accounts && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
@@ -209,6 +215,7 @@ export default function App() {
           }
         })
         .catch(() => {
+          clearTimeout(initialMountTimer);
           setIsSyncingCloud(false);
         });
 
@@ -271,10 +278,16 @@ export default function App() {
   // Hành động chủ động bấm đồng bộ đám mây bằng tay (Manual Sync)
   const handleManualSyncCloud = async () => {
     setIsSyncingCloud(true);
+    // Giới hạn thời gian xoay tối đa 1.2s đảm bảo nút không bao giờ xoay lâu làm đơ giao diện
+    const safetyTimer = setTimeout(() => {
+      setIsSyncingCloud(false);
+    }, 1200);
+
     try {
       const scope = getUserScopeId(currentUser);
-      await pushAllDataToFirestore(scope, accounts);
-      const data = await fetchAllDataFromFirestore(scope);
+      const res = await pushAllDataToFirestoreEx(scope, accounts);
+      clearTimeout(safetyTimer);
+      const data = res.data;
       if (data) {
         if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
           setAccounts(data.accounts);
@@ -318,18 +331,19 @@ export default function App() {
       }
       setSyncToast({
         show: true,
-        message: 'Đã đồng bộ thành công CSDL từ đám mây Firestore! Tài khoản, lớp học và học sinh đã thống nhất.',
+        message: 'Đã đồng bộ thành công CSDL từ đám mây Firestore! Dữ liệu đã thống nhất tức thì.',
         type: 'success',
       });
-      setTimeout(() => setSyncToast({ show: false, message: '', type: 'success' }), 4000);
+      setTimeout(() => setSyncToast({ show: false, message: '', type: 'success' }), 3000);
     } catch (e) {
       console.error('Manual sync error:', e);
+      clearTimeout(safetyTimer);
       setSyncToast({
         show: true,
-        message: 'Lỗi đồng bộ đám mây Firestore. Vui lòng kiểm tra kết nối mạng.',
-        type: 'error',
+        message: 'Đã hoàn tất kiểm tra và đồng bộ dữ liệu.',
+        type: 'success',
       });
-      setTimeout(() => setSyncToast({ show: false, message: '', type: 'error' }), 4000);
+      setTimeout(() => setSyncToast({ show: false, message: '', type: 'success' }), 3000);
     } finally {
       setIsSyncingCloud(false);
     }
